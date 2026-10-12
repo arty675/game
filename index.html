@@ -1811,7 +1811,7 @@ function updateFreeCam(dt) {
   camera.position.copy(camState.freePos); camera.rotation.set(camState.freePitch, camState.freeYaw, 0);
 }
 addEventListener('mousemove', e => { if (camState.free && e.buttons) { camState.freeYaw -= e.movementX * 0.004; camState.freePitch = clamp(camState.freePitch - e.movementY * 0.004, -1.5, 1.5); } });
-const fx = { steam: 0, flash: 0 };
+const fx = { steam: 0, steamTarget: 0, flash: 0 };
 function renderFrame(scene) {
   const T = TUNING;
   if (T.post) {
@@ -2227,6 +2227,7 @@ function collideDynamic(P) {
       if (d < TUNING.nearMissDist) { c.nearT = W.time; nearMiss(P, 'car'); }
     }
   }
+  if (W.hazards) for (const hz of W.hazards) { if (!hz.obb) continue; const h = capsuleHit(b, hz.obb, TUNING.bikeRadius); if (h) { b.x += h.nx * h.pen; b.z += h.nz * h.pen; if (respondImpact(P, h.nx, h.nz, 0, 0, hz, hz.kind)) return; } }
   if (W.peds) collidePeds(P);
 }
 function capsuleDistance(b, box) {
@@ -2360,7 +2361,217 @@ function spawnScriptPed(outfit, x, z, heading, script) {
   return pd;
 }
 
-// @@SECTION12@@
+// ===================================================================================
+// 12. SITUATION DIRECTOR — data-driven cards: { id, weight, rarity, trigger, prerequisites,
+//     cooldown, tellSeconds, run(), outcomes[] }. Each shift's deck and ambient schedule are rolled
+//     from the director's seeded stream: common = always in the deck, uncommon ≈ 60% of shifts,
+//     rare ≈ 1 in 20 shifts. run() returns a handle { update(dt) → outcome|null, cleanup() }.
+// ===================================================================================
+const CHEERFUL = ['Oopsie! 🙈 Every crash is a learning opportunity!', 'Crash detected! We have notified absolutely no one. Keep going! 💪', 'Your safety matters to us! (Not legally.)', 'Wow, what a tumble! Remember: you are an independent contractor ✨', 'Fun fact: lying down counts as a break! ☕', 'Great energy! Customers love a courier with stories! 📖'];
+function playerPath(P, maxAlong) { const b = P.bike, f = bikeFwd(b); return { b, f, along: p => (p.x - b.x) * f.x + (p.z - b.z) * f.z, lat: p => Math.abs((p.x - b.x) * f.z - (p.z - b.z) * f.x) }; }
+function riding(P, minSpeed = 3) { const b = P.bike; return b.state === 'ride' && !P.onFoot && Math.hypot(b.vx, b.vz) > minSpeed; }
+function addHazard(h) { W.hazards.push(h); return h; }
+function removeHazard(h) { const i = W.hazards.indexOf(h); if (i >= 0) W.hazards.splice(i, 1); }
+function removeCar(car) { const tr = W.traffic, i = tr.cars.indexOf(car); if (i >= 0) tr.cars.splice(i, 1); car.mesh.removeFromParent(); }
+function walkPose(phase, amp = 1) { const s = Math.sin(phase), c = Math.cos(phase); return { spine: [0.03, 0, 0], hipL: [-0.45 * s * amp, 0, 0.03], hipR: [0.45 * s * amp, 0, -0.03], knL: [Math.max(0, -c) * 0.7 * amp, 0, 0], knR: [Math.max(0, c) * 0.7 * amp, 0, 0], shL: [0.35 * s * amp, 0, 0.08], shR: [-0.35 * s * amp, 0, -0.08], elL: [-0.25, 0, 0], elR: [-0.25, 0, 0] }; }
+function steamSprite() {
+  if (!steamSprite.tex) { const c = document.createElement('canvas'); c.width = c.height = 64; const g = c.getContext('2d'), gr = g.createRadialGradient(32, 32, 2, 32, 32, 31); gr.addColorStop(0, 'rgba(255,255,255,0.9)'); gr.addColorStop(1, 'rgba(255,255,255,0)'); g.fillStyle = gr; g.fillRect(0, 0, 64, 64); steamSprite.tex = new THREE.CanvasTexture(c); }
+  return new THREE.Sprite(new THREE.SpriteMaterial({ map: steamSprite.tex, transparent: true, depthWrite: false, opacity: 0.8 }));
+}
+
+const SITUATIONS = [
+  { id: 'bike_lane_bully', rarity: 'common', weight: 5, trigger: 'ambient', cooldown: 50, tellSeconds: 1.6, clip: true, outcomes: ['dodged', 'crashed'],
+    prerequisites(ctx) {
+      const P = ctx.P; if (!riding(P, 4)) return false;
+      const b = P.bike, f = bikeFwd(b);
+      for (const L of W.lanes) { if (L.type !== 'bike') continue; const t = (b.x - L.a.x) * L.d.x + (b.z - L.a.z) * L.d.z, lat = Math.abs((b.x - L.a.x) * L.d.z - (b.z - L.a.z) * L.d.x);
+        if (lat < 1.6 && t > 0 && t < L.len - 35 && vdot(f, L.d) > 0.8) { const tl = W.lanes.find(l => l.run === L.run && l.type === 'travel' && l.band.dir === L.band.dir); if (tl) { ctx.lane = L; ctx.travel = tl; return true; } } }
+      return false;
+    },
+    run(ctx) {
+      const P = ctx.P, L = ctx.lane, run = L.run, tr = W.traffic, R = W.rng.director;
+      const tP = () => (P.bike.x - L.a.x) * L.d.x + (P.bike.z - L.a.z) * L.d.z;
+      const curbSide = Math.abs(L.band.o1) > Math.abs(L.band.o0) ? L.band.o1 : L.band.o0, inward = -Math.sign(curbSide);
+      const latTravel = ctx.travel.band.oc, latBully = curbSide + inward * (0.9 + MODULES.VEH_SUV.w / 2);
+      const car = spawnCar(W, tr, 'VEH_SUV', { cars: [], len: 1e9, pts: [L.a, L.b], cum: [0, 1e9] }, 0, R, { v: 0 });
+      car.path.cars.length = 0; car.ignorePlayer = true;
+      const st = { t: tP() - 18, lat: latTravel, v: Math.hypot(P.bike.vx, P.bike.vz) + 3, phase: 'approach', pt: 0, crashed: false };
+      const setPos = () => { const p = vat(L.a, L.d, st.t, run.r, st.lat - L.band.oc); car.heading = yawOf(L.d) + clamp((st.latV || 0) * 0.08, -0.3, 0.3); car.x = p.x; car.z = p.z; car.v = st.v; };
+      setPos(); car.px = car.x; car.pz = car.z; car.ph = car.heading;
+      car.script = (c, dt) => {
+        const pv = Math.max(Math.hypot(P.bike.vx, P.bike.vz), 2.5), gap = tP() - st.t; st.pt += dt; const lat0 = st.lat;
+        if (st.phase === 'approach') { st.v = pv + 3; if (gap < 7) { st.phase = 'tell'; st.pt = 0; sfx('rev', 1, c); } }
+        else if (st.phase === 'tell') { st.v = pv; if (st.pt > 0.2 && !st.h1) { st.h1 = true; sfx('honk', 1, c); } if (st.pt > 1.0 && !st.h2) { st.h2 = true; sfx('honk', 1, c); } if (st.pt > ctx.card.tellSeconds) { st.phase = 'pass'; st.pt = 0; } }
+        else if (st.phase === 'pass') { st.v = pv + 5; if (gap < -9) { st.phase = 'swerve'; st.pt = 0; sfx('honk', 1, c); } }
+        else if (st.phase === 'swerve') { st.v = Math.max(pv * 0.9, 3); st.lat = lerp(latTravel, latBully, smooth(0, 0.9, st.pt)); if (st.pt > 0.9) { st.phase = 'squeeze'; st.pt = 0; } }
+        else if (st.phase === 'squeeze') { st.v = Math.max(2, pv * 0.55); if (st.pt > 2.6) { st.phase = 'leave'; st.pt = 0; } }
+        else if (st.phase === 'leave') { st.v = Math.min(14, st.v + 3 * dt); st.lat = lerp(latBully, latTravel, smooth(0, 1.2, st.pt)); }
+        if (st.t > L.len - 8 && st.phase !== 'leave') { st.phase = 'leave'; st.pt = 0; }
+        st.latV = (st.lat - lat0) / dt; st.t += st.v * dt; setPos();
+      };
+      return { car, update() { if (P.bike.state === 'crash') st.crashed = true; const far = Math.hypot(car.x - P.bike.x, car.z - P.bike.z); if ((st.phase === 'leave' && far > 60) || st.t > L.len + 30) return st.crashed ? 'crashed' : 'dodged'; return null; }, cleanup() { removeCar(car); } };
+    } },
+  { id: 'door_zone', rarity: 'common', weight: 5, trigger: 'ambient', cooldown: 35, tellSeconds: 1.0, clip: true, outcomes: ['dodged', 'doored'],
+    prerequisites(ctx) {
+      const P = ctx.P; if (!riding(P, 3)) return false; const pp = playerPath(P);
+      for (const pc of W.parked) { if (pc.used) continue; const H = vadd(vadd(pc.p, vmul(pc.fwd, 0.35)), vmul(pc.doorSide, pc.w / 2)), D = vadd(H, vmul(pc.doorSide, 0.6)); const a = pp.along(D); if (a > 12 && a < 35 && pp.lat(D) < 1.4) { ctx.pc = pc; ctx.H = H; return true; } }
+      return false;
+    },
+    run(ctx) {
+      const P = ctx.P, pc = ctx.pc, H = ctx.H; pc.used = true;
+      const pivot = G(); pivot.position.set(H.x, Y_ROAD + 0.38, H.z); pivot.rotation.y = yawOf(pc.fwd);
+      B(pivot, MODULES[pc.id].mat, -0.035, 0, -1.05, 0.035, 0.72, 0); B(pivot, 'M_Glass', -0.04, 0.42, -0.95, 0.04, 0.7, -0.1); W.scene.add(pivot);
+      const hz = addHazard({ kind: 'door', obb: null });
+      const st = { t: 0, ang: 0 }; sfx('door', 1);
+      return { update(dt) {
+        st.t += dt; const T1 = ctx.card.tellSeconds;
+        st.ang = st.t < T1 ? 0.2 : st.t < T1 + 0.35 ? lerp(0.2, 1.2, (st.t - T1) / 0.35) : st.t < T1 + 3.4 ? 1.2 : lerp(1.2, 0, clamp((st.t - T1 - 3.4) / 0.6, 0, 1));
+        pivot.rotation.y = yawOf(pc.fwd) - st.ang;
+        const dir = vadd(vmul(pc.fwd, -Math.cos(st.ang)), vmul(pc.doorSide, Math.sin(st.ang))), c = vadd(H, vmul(dir, 0.525));
+        hz.obb = { cx: c.x, cz: c.z, hx: 0.525, hz: 0.06, ax: dir.x, az: dir.z, y0: Y_ROAD, y1: 1.2 };
+        if (P.bike.state === 'crash' && P.crashKind === 'door') st.doored = true;
+        return st.t > T1 + 4.1 ? (st.doored ? 'doored' : 'dodged') : null;
+      }, cleanup() { pivot.removeFromParent(); removeHazard(hz); } };
+    } },
+  { id: 'steam_vent', rarity: 'common', weight: 3, trigger: 'ambient', cooldown: 40, tellSeconds: 1.5, outcomes: ['blinded', 'missed'],
+    prerequisites(ctx) { const P = ctx.P; if (!riding(P, 3)) return false; const pp = playerPath(P); for (const m of W.manholes) { const a = pp.along(m); if (a > 15 && a < 40 && pp.lat(m) < 2.5) { ctx.m = m; return true; } } return false; },
+    run(ctx) {
+      const P = ctx.P, m = ctx.m, grp = G(), R = W.rng.fx, puffs = []; W.scene.add(grp);
+      for (let i = 0; i < 14; i++) { const s = steamSprite(); s.userData = { off: R.range(0, 1), dx: R.range(-0.6, 0.6), dz: R.range(-0.6, 0.6) }; grp.add(s); puffs.push(s); }
+      grp.position.set(m.x, Y_ROAD, m.z); sfx('hiss', 0.6, m);
+      const st = { t: 0, hit: false };
+      return { update(dt) {
+        st.t += dt; const T1 = ctx.card.tellSeconds, big = st.t > T1, fade = clamp((T1 + 7 - st.t) / 1.5, 0, 1);
+        if (big && !st.burst) { st.burst = true; sfx('hiss', 1, m); }
+        for (const s of puffs) { const u = (st.t * (big ? 0.35 : 0.6) + s.userData.off) % 1, sz = big ? 2.5 + u * 5 : 0.4 + u * 0.8; s.position.set(s.userData.dx * (1 + u * 2), u * (big ? 7 : 1.6), s.userData.dz * (1 + u * 2)); s.scale.setScalar(sz); s.material.opacity = (1 - u) * (big ? 0.75 : 0.5) * fade; }
+        const d = Math.hypot(P.bike.x - m.x, P.bike.z - m.z);
+        fx.steamTarget = big && fade > 0.1 && d < 4.5 && !P.onFoot ? 0.92 * fade : 0;
+        if (fx.steamTarget > 0.5 && !st.hit) { st.hit = true; if (P.cargo) cargoImpulse(P, 'bump', 0.02); }
+        return st.t > T1 + 7 ? (st.hit ? 'blinded' : 'missed') : null;
+      }, cleanup() { grp.removeFromParent(); fx.steamTarget = 0; } };
+    } },
+  { id: 'cellar_hatch', rarity: 'uncommon', weight: 3, trigger: 'ambient', cooldown: 45, tellSeconds: 1.0, outcomes: ['avoided', 'fell in'],
+    prerequisites(ctx) { const P = ctx.P; if (!riding(P, 2.5) || P.bike.surf !== 2) return false; const pp = playerPath(P); for (const h of W.cellarHatches) { const a = pp.along(h.p); if (a > 8 && a < 30 && pp.lat(h.p) < 1.6) { ctx.h = h; return true; } } return false; },
+    run(ctx) {
+      const P = ctx.P, h = ctx.h, { g } = place('ST_CellarHatch', { open: 0 }, h.p.x, 0.006, h.p.z, h.yaw, { dynamic: true, noCollide: true });
+      const leaves = [g.children[1], g.children[2]], st = { t: 0, open: 0 }, ax = Math.cos(h.yaw), az = -Math.sin(h.yaw);
+      const hzA = addHazard({ kind: 'hatch', obb: null }), hzB = addHazard({ kind: 'hatch', obb: null });
+      sfx('clank', 1, h.p);
+      return { update(dt) {
+        st.t += dt; const T1 = ctx.card.tellSeconds;
+        st.open = st.t < T1 ? 0.05 * Math.abs(Math.sin(st.t * 30)) : st.t < T1 + 0.4 ? (st.t - T1) / 0.4 : st.t < T1 + 5.5 ? 1 : clamp(1 - (st.t - T1 - 5.5) / 0.6, 0, 1);
+        leaves[0].rotation.z = st.open * 1.45; leaves[1].rotation.z = -st.open * 1.45;
+        const up = st.open > 0.6;
+        hzA.obb = up ? { cx: h.p.x - ax * 0.75, cz: h.p.z - az * 0.75, hx: 0.05, hz: 0.6, ax, az, y0: 0, y1: 0.8 } : null;
+        hzB.obb = up ? { cx: h.p.x + ax * 0.75, cz: h.p.z + az * 0.75, hx: 0.05, hz: 0.6, ax, az, y0: 0, y1: 0.8 } : null;
+        if (up && P.bike.state === 'ride') { const f = bikeFwd(P.bike), fx2 = P.bike.x + f.x * 0.6, fz2 = P.bike.z + f.z * 0.6, dx = fx2 - h.p.x, dz = fz2 - h.p.z, lx = dx * ax + dz * az, lz = -dx * az + dz * ax;
+          if (Math.abs(lx) < 0.7 && Math.abs(lz) < 0.55 && Math.hypot(P.bike.vx, P.bike.vz) > 1) { crash(P, 'hatch', null); st.fell = true; } }
+        return st.t > T1 + 6.2 ? (st.fell ? 'fell in' : 'avoided') : null;
+      }, cleanup() { g.removeFromParent(); removeHazard(hzA); removeHazard(hzB); } };
+    } },
+  { id: 'tourists_stop_dead', rarity: 'common', weight: 3, trigger: 'ambient', cooldown: 45, tellSeconds: 1.2, outcomes: ['weaved', 'braked', 'crashed'],
+    prerequisites(ctx) {
+      const P = ctx.P; if (!riding(P, 3)) return false; const b = P.bike, f = bikeFwd(b); if (b.surf !== 2 && !W.lanes.some(L => L.type === 'bike' && Math.abs((b.x - L.a.x) * L.d.z - (b.z - L.a.z) * L.d.x) < 1.4)) return false;
+      for (const d of [14, 16, 18]) { const p = vat(b, f, d, f, 0); if (W.surface.codeAt(p.x, p.z) === 0) return false; } return true;
+    },
+    run(ctx) {
+      const P = ctx.P, b = P.bike, f = bikeFwd(b), r = vrot(f), list = [], st = { t: 0 };
+      [[-0.75, 'c03'], [0, 'c05'], [0.8, 'pedA']].forEach(([o, out], i) => { const p = vat(b, f, 17 + i * 0.4, r, o); const pd = spawnScriptPed(out, p.x, p.z, yawOf(f), (pd, dt) => {
+        const T1 = ctx.card.tellSeconds;
+        if (st.t < T1) { pd.x += f.x * 0.6 * dt; pd.z += f.z * 0.6 * dt; pd.phase += dt * 3; pd.pose = i === 1 ? POSES.photo : null; pd.moving = true; }
+        else if (st.t < T1 + 5) { pd.pose = i === 1 ? POSES.photo : (i === 0 ? POSES.wave : POSES.idle); pd.heading = yawOf(f) + Math.PI * (i === 1 ? 1 : 0.15); }
+        else { pd.pose = null; pd.heading = yawOf(r) * 1; pd.x += r.x * 1.2 * dt * (i - 1 || 1); pd.z += r.z * 1.2 * dt * (i - 1 || 1); pd.phase += dt * 5; pd.moving = true; }
+      }); if (pd) list.push(pd); });
+      return { update(dt) { st.t += dt; if (P.bike.state === 'crash') st.crashed = true; return st.t > ctx.card.tellSeconds + 8 ? (st.crashed ? 'crashed' : 'weaved') : null; }, cleanup() { for (const pd of list) { pd.script = null; hidePed(pd); } } };
+    } },
+  { id: 'film_shoot', rarity: 'rare', weight: 1, trigger: 'shiftStart', cooldown: 0, tellSeconds: 0, outcomes: ['set dressed'],
+    prerequisites() { return true; },
+    run(ctx) {
+      const R = W.rng.director, sides = []; for (const blk of W.layout.blocks) for (const s of blk.sides) if (s.prof.name === 'street' && s.len > 60) sides.push(s);
+      if (!sides.length) return null;
+      const s = R.pick(sides), t0 = s.len * R.range(0.3, 0.55), yaw = yawOf(s.nOut), fz = s.walk - CURB_W - 0.5, objs = [];
+      const put = (id, prm, t, o, rot) => { const q = vat(s.a, s.d, t, s.nOut, o); objs.push(place(id, prm, q.x, 0, q.z, rot, { dynamic: true }).g); };
+      for (let k = 0; k <= 8; k++) put('ST_Cone', {}, t0 + k * 2, fz, 0);
+      put('ST_JerseyBarrier', {}, t0 - 0.6, s.walk / 2, yaw + Math.PI / 2); put('ST_JerseyBarrier', {}, t0 + 16.6, s.walk / 2, yaw + Math.PI / 2);
+      put('ST_LampPost', {}, t0 + 5, 1.2, 0); put('ST_LampPost', {}, t0 + 11, 1.2, 0); put('ST_NewsBox', {}, t0 + 8, 0.8, yaw); put('ST_TrashCan', {}, t0 + 9, 0.9, 0);
+      const crew = []; [3, 13].forEach(t => { const q = vat(s.a, s.d, t0 + t, s.nOut, s.walk + 0.6); const pd = spawnScriptPed('pedB', q.x, q.z, yawOf(s.nIn), (pd) => { const P = players[0], d = Math.hypot(P.bike.x - pd.x, P.bike.z - pd.z); pd.pose = d < 12 ? POSES.shoo : POSES.idle; if (d < 9 && !pd.yelled && !P.onFoot) { pd.yelled = true; showBubble(new THREE.Vector3(pd.x, 2.1, pd.z), 'SHHH! Rrrolling!', 'We are SHOOTING here.', 2.5); sfx('gibber'); } if (d > 20) pd.yelled = false; }); if (pd) crew.push(pd); });
+      appNotify('Heads up: a film shoot is blocking a sidewalk. Fame is not an excuse to be late.');
+      return { update() { return null; }, cleanup() { objs.forEach(o => o.removeFromParent()); crew.forEach(hidePed); }, persistent: true };
+    } },
+  { id: 'crash_customer', rarity: 'common', weight: 10, trigger: 'crash', cooldown: 0, tellSeconds: 0, clip: true, outcomes: ['no tip'],
+    prerequisites(ctx) { const P = ctx.P, o = P.order; if (!o || o.state !== 'toCustomer' || !P.cargo) return false; const e = o.offer.bld.entrance.p; return Math.hypot(P.bike.x - e.x, P.bike.z - e.z) < 25; },
+    run(ctx) {
+      const P = ctx.P, o = P.order, e = o.offer.bld.entrance, ids = ['CHR_Customer01', 'CHR_Customer02', 'CHR_Customer03', 'CHR_Customer04', 'CHR_Customer05', 'CHR_Customer06'];
+      const c = MODULES[ids[(o.offer.id * 7 + Math.floor(o.offer.bld.c.x)) % 6]].build(); c.position.set(e.approach.x, 0, e.approach.z); W.scene.add(c);
+      P.crashHold = true; const st = { t: 0, phase: 'walk', ph: 0 }, head = new THREE.Vector3();
+      const target = () => { const p = P.rag ? P.rag.p[RAG_P.pelvis] : P.bike; return p; };
+      const finish = () => { if (st.done) return; st.done = true; const stt = P.cargo ? P.cargo.state : 2, late = Math.max(0, W.shift.t - (o.acceptT + o.eta)); const line = stt === 0 ? (late > 20 ? ['Late AND on the floor. Hrmph.', 'Late. No tip.'] : ['Mine now. Blorp.', 'I will take that. No tip, obviously.']) : stt === 1 ? ['Squished. No tip. Bye.', 'It is damaged. No tip.'] : ['Grrbl. Ruined. No tip!', 'It is ruined. Zero tip. Zero stars.']; showBubble(new THREE.Vector3(c.position.x, 2.05, c.position.z), line[0], line[1], 3.2); sfx('gibber'); if (P.cargo) unloadCargo(P); finishDelivery(P, true); P.crashHold = false; P.lookAtTarget = null; };
+      return { update(dt) {
+        st.t += dt; const tg = target(), dx = tg.x - c.position.x, dz = tg.z - c.position.z, d = Math.hypot(dx, dz);
+        if (P.crashSkipScene) { P.crashSkipScene = false; finish(); }
+        if (st.phase === 'walk') { if (d > 0.95) { const sp = 1.6 * dt; c.position.x += dx / d * sp; c.position.z += dz / d * sp; c.rotation.y = Math.atan2(dx, dz); st.ph += dt * 6.5; poseCharacter(c, walkPose(st.ph)); } else { st.phase = 'take'; st.t = 0; } if (st.t > 12) finish(); }
+        else if (st.phase === 'take') { poseCharacter(c, POSES.take_bag); if (st.t > 1.0) { st.phase = 'leave'; st.t = 0; finish(); } }
+        else if (st.phase === 'leave') { poseCharacter(c, walkPose(st.t * 6)); const back = vsub(e.p, v(c.position.x, c.position.z)), bl = vlen(back); if (bl > 0.3) { c.position.x += back.x / bl * 1.4 * dt; c.position.z += back.z / bl * 1.4 * dt; c.rotation.y = Math.atan2(back.x, back.z); } if (st.t > 6) return 'no tip'; }
+        c.position.y = W.surface.height(c.position.x, c.position.z);
+        c.getWorldPosition(head); head.y += 1.6 * c.userData.k; P.lookAtTarget = st.phase !== 'leave' ? head : null;
+        return null;
+      }, cleanup() { c.removeFromParent(); P.crashHold = false; P.lookAtTarget = null; } };
+    } },
+  { id: 'cheerful_app', rarity: 'common', weight: 10, trigger: 'crash', cooldown: 4, tellSeconds: 0, outcomes: ['notified'],
+    prerequisites() { return true; }, run() { setTimeout(() => appNotify(W.rng.fx.pick(CHEERFUL)), 700); return null; } },
+  { id: 'wrong_pin', rarity: 'uncommon', weight: 3, trigger: 'accept', cooldown: 0, tellSeconds: 0, outcomes: ['found door'],
+    prerequisites(ctx) { return ctx.roll.pin < 0.4; }, run(ctx) { ctx.order.wrongPin = true; return null; } },
+  { id: 'scrambled_floors', rarity: 'uncommon', weight: 3, trigger: 'enterBuilding', cooldown: 0, tellSeconds: 0, outcomes: ['found by elimination'],
+    prerequisites(ctx) { return ctx.roll.twist < 0.45; }, run(ctx) { ctx.flags.scrambled = true; return null; } },
+  { id: 'odd_floors_only', rarity: 'uncommon', weight: 3, trigger: 'enterBuilding', cooldown: 0, tellSeconds: 0, outcomes: ['took the stairs'],
+    prerequisites(ctx) { return !ctx.flags.scrambled && ctx.order.offer.floor % 2 === 0 && ctx.roll.twist < 0.85; }, run(ctx) { ctx.flags.oddOnly = true; return null; } },
+  { id: 'tip_bait', rarity: 'uncommon', weight: 2, trigger: 'offer', cooldown: 0, tellSeconds: 0, outcomes: ['tip shrank to $1'],
+    prerequisites(ctx) { return ctx.roll < 0.22; }, run() { return null; } },
+];
+
+function createDirector(W) {
+  const R = W.rng.director;
+  const deck = SITUATIONS.filter(s => s.rarity === 'common' || (s.rarity === 'uncommon' && R.chance(0.6)) || (s.rarity === 'rare' && R.chance(0.05)));
+  const ambient = deck.filter(s => s.trigger === 'ambient'), schedule = [R.chance(0.5) ? 'bike_lane_bully' : 'door_zone'];
+  for (let i = 0; i < 40; i++) schedule.push(R.weighted(ambient, s => s.weight).id);
+  const rolls = []; for (let i = 0; i < 60; i++) rolls.push({ twist: R.float(), pin: R.float() });
+  const D = { deck, schedule, idx: 0, active: [], cooldown: {}, nextT: TUNING.situationEvery, waitT: 0, log: [], rolls, baits: 0, orderN: 0,
+    has: id => deck.some(s => s.id === id),
+    card: id => SITUATIONS.find(s => s.id === id),
+    logEvent(id, what) { D.log.push({ t: W.shift ? W.shift.t : 0, id, what }); if (D.log.length > 40) D.log.shift(); },
+    start(card, ctx, force = false) {
+      if (!force && (!D.has(card.id) || (D.cooldown[card.id] || -1e9) > (W.shift ? W.shift.t : 0))) return false;
+      ctx.card = card; if (!force && !card.prerequisites(ctx)) return false;
+      if (force && card.prerequisites && !card.prerequisites(ctx) && card.trigger === 'ambient') return false;
+      const h = card.run(ctx); D.cooldown[card.id] = (W.shift ? W.shift.t : 0) + card.cooldown; D.logEvent(card.id, 'start');
+      if (h) { h.card = card; D.active.push(h); }
+      return true;
+    },
+    fire(trigger, ctx) { for (const card of deck) if (card.trigger === trigger) D.start(card, { ...ctx }); },
+    onCrash(P, kind) { D.fire('crash', { P, kind }); },
+    onRespawn() {}, onPickup(P, o) { if (o.wrongPin) { let best = null; for (const j of W.layout.junctions) { const d = vlen(vsub(j.p, o.offer.bld.entrance.p)); if (!best || d < best.d) best = { d, j }; } o.pin = best ? v(best.j.p.x, best.j.p.z) : null; } },
+    onDelivered(P, o) { if (o.offer.bait) D.logEvent('tip_bait', 'tip shrank to $1'); if (o.wrongPin) D.logEvent('wrong_pin', 'found door'); },
+    onCargoDamage(P, s) { if (s === 2 && W.rng.fx.chance(0.5)) appNotify('We have let the customer know their order is "evolving". 🙂'); },
+    onAccept(P, order) { const roll = D.rolls[D.orderN++ % D.rolls.length]; order.roll = roll; D.fire('accept', { P, order, roll }); },
+    onEnterBuilding(P, order) { const flags = {}; D.fire('enterBuilding', { P, order, roll: order.roll || { twist: 1 }, flags }); return flags; },
+    wantsBait(roll) { if (!D.has('tip_bait') || D.baits >= 2) return false; if (roll < 0.22) { D.baits++; return true; } return false; },
+    update(dt) {
+      const P = players[0], sh = W.shift; if (!sh) return;
+      for (const h of D.active.slice()) { const out = h.update(dt); if (out) { D.logEvent(h.card.id, out); h.cleanup(); D.active.splice(D.active.indexOf(h), 1); } }
+      // wrong pin reveal
+      const o = P.order; if (o && o.pin) { const dp = Math.hypot(P.bike.x - o.pin.x, P.bike.z - o.pin.z), dd = Math.hypot(P.bike.x - o.offer.bld.entrance.p.x, P.bike.z - o.offer.bld.entrance.p.z); if (dp < 7 && !o.pinArrived) { o.pinArrived = sh.t; appNotify('You have arrived! 🎉 (The customer says they are "the one with the door".)'); } if ((o.pinArrived && sh.t - o.pinArrived > 3) || dd < 22) { o.pin = null; appNotify('Updated pin. It was a different place all along.'); } }
+      // ambient schedule: try the next card; skip it after 25 s of unmet prerequisites
+      if (sh.over || !D.active.every(h => h.persistent) || sh.t < D.nextT) return;
+      const id = D.schedule[D.idx % D.schedule.length], card = D.card(id);
+      if (D.start(card, { P })) { D.idx++; D.waitT = 0; D.nextT = sh.t + TUNING.situationEvery; }
+      else { D.waitT += dt; if (D.waitT > 25) { D.idx++; D.waitT = 0; } }
+    },
+  };
+  W.hazards = [];
+  for (const card of deck) if (card.trigger === 'shiftStart') D.start(card, { P: players[0] });
+  return D;
+}
+
 // ===================================================================================
 // 13. INTERIORS — built from the 03B kit on entry: vestibule → corridor → stairs or lift →
 //     floor corridor with numbered doors. On-foot WASD. Corridor axis = +X, clear width 2.00,
@@ -2828,7 +3039,7 @@ function updateHUD(P, dt) {
   // prompts
   let pr = '';
   const o = P.order, b = P.bike;
-  if (P.bike.state === 'crash') pr = P.crashT > TUNING.crashMinTime ? 'Any key — get up' : '';
+  if (P.bike.state === 'crash') pr = P.crashHold ? 'Any key — skip' : P.crashT > TUNING.crashMinTime ? 'Any key — get up' : '';
   else if (o && !P.onFoot) {
     if (o.state === 'toRestaurant') { const a = o.offer.rest.approach, d = Math.hypot(b.x - a.x, b.z - a.z); if (d < 6) pr = o.hold > 0 ? 'Picking up… hold still' : 'Stop at the orange ring to pick up'; }
     if (o.state === 'toCustomer') { const a = o.offer.bld.entrance.approach, d = Math.hypot(b.x - a.x, b.z - a.z); if (d < 3.6) pr = '<kbd>E</kbd> enter building · Apt ' + o.offer.apt; }
@@ -2964,7 +3175,7 @@ addEventListener('keydown', e => {
   if (['F1', 'F2', 'Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Backquote', 'Tab'].includes(e.code)) e.preventDefault();
   KEYS.add(e.code); if (e.repeat) return;
   audioUnlock();
-  for (const P of players) if (P.bike.state === 'crash' && e.code !== 'KeyR') P.crashSkip = true;
+  for (const P of players) if (P.bike.state === 'crash' && e.code !== 'KeyR') { P.crashSkip = true; if (P.crashHold) P.crashSkipScene = true; }
   const map = { KeyV: 'camera', KeyR: 'restart', Escape: 'pause', KeyE: 'accept', KeyQ: 'decline', KeyB: 'bell', KeyM: 'mute' };
   if (e.code === 'KeyC' && game.mode !== 'title') { const ids = Object.keys(CARGO_TYPES), P = players[0]; const i = P.cargo ? (ids.indexOf(P.cargo.type) + 1) % (ids.length + 1) : 0; if (i < ids.length) loadCargo(P, ids[i]); else unloadCargo(P); return; }
   if (e.code === 'F2') { const t = ui('tuning'); t.style.display = t.style.display === 'block' ? 'none' : 'block'; return; }
@@ -2980,6 +3191,7 @@ addEventListener('blur', () => KEYS.clear());
 function beginShift() {
   ui('title').style.display = 'none'; ui('receipt').style.display = 'none'; game.mode = 'street'; game.paused = false;
   createShift(W); buildMinimapBase(W); audioUnlock();
+  W.director = createDirector(W);
   const P = players[0]; P.order = null; P.offer = null; P.declines = 0; unloadCargo(P); clearChain(P, 'start'); Object.assign(P.stats, { orders: 0, tips: 0, pay: 0, bonus: 0, crashes: 0, bestChain: 1, nearMisses: 0 });
   appNotify('Shift started. Accept offers with E. Be nice to the cake.');
 }
@@ -2996,6 +3208,7 @@ function tick(dt) {
     P.events.length = 0;
   }
   updateSignals(dt); updateTraffic(dt); updatePeds(dt); updateShift(dt);
+  if (W.director) W.director.update(dt);
 }
 let acc = 0, last = performance.now();
 const perf = { fps: 60, ms: 16 };
@@ -3011,7 +3224,7 @@ function frame(now) {
     if (n === 6) acc = 0;
   }
   const alpha = clamp(acc / DT, 0, 1);
-  updateFade(dtReal); fx.flash = Math.max(0, fx.flash - dtReal * 2);
+  updateFade(dtReal); fx.flash = Math.max(0, fx.flash - dtReal * 2); fx.steam = damp(fx.steam, P.onFoot ? 0 : fx.steamTarget, fx.steamTarget > fx.steam ? 6 : 1.5, dtReal);
   if (P.bike.state === 'crash') renderCrash(P); else renderBike(P, alpha);
   renderTraffic(alpha); renderPeds(alpha);
   updateCamera(P, alpha, dtReal);
@@ -3032,7 +3245,7 @@ function boot() {
   ui('startBtn').onclick = beginShift;
   // test hook: advance the fixed-step simulation synchronously (headless tests render slowly)
   const sim = (sec) => { const P = players[0]; for (let i = 0; i < Math.round(sec / DT); i++) { readInput(P); tick(DT); updateFade(DT); } acc = 0; return W.time; };
-  window.__game = { get W() { return W; }, players, TUNING, MODULES, game, KEYS, perf, renderer, sim, onAction, loadCargo, placeBike, camState, camera, beginShift, endShift };
+  window.__game = { get W() { return W; }, players, TUNING, MODULES, game, KEYS, perf, renderer, sim, onAction, loadCargo, placeBike, camState, camera, beginShift, endShift, SITUATIONS, crash };
   requestAnimationFrame(frame);
 }
 boot();
