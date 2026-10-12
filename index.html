@@ -1622,7 +1622,7 @@ function updateBike(P, dt) {
   if (Math.abs(vF) > 0.01) a -= (T.rollingDrag + T.aeroDrag * vF * vF) * Math.sign(vF);
   const hard = inp.hardBrake || inp.brake >= T.hardBrakeThreshold;
   const brakeDecel = hard ? T.hardBrakeDecel : inp.brake * T.brakeDecel;
-  b.brakeHold = inp.brake > 0.2 && !hard && Math.abs(vF) < 0.3 && inp.throttle === 0 ? b.brakeHold + dt : 0;
+  b.brakeHold = inp.brake > 0.2 && !hard && vF < 0.3 && inp.throttle === 0 ? b.brakeHold + dt : 0;
   let vNew;
   if (b.brakeHold > 0.45) vNew = approach(vF, -T.reverseKmh * KMH, 2.5 * dt);           // walk the bike backwards
   else {
@@ -1896,7 +1896,7 @@ function makeRagdoll(P, vx, vz, sp) {
   const cl = Math.cos(b.lean), sl = Math.sin(b.lean), base = b.yVis;
   const rag = P.rag || { p: RAG_REST.map(() => new THREE.Vector3()), o: RAG_REST.map(() => new THREE.Vector3()), mesh: null, len: [] };
   RAG_REST.forEach(([x, y, z], i) => {
-    const xl = x * cl + y * sl, yl = -x * sl + y * cl;                  // apply the lean roll
+    const xl = x * cl - y * sl, yl = x * sl + y * cl;                   // apply the lean roll (+lean = right)
     rag.p[i].set(b.x + l.x * xl + f.x * z, base + yl, b.z + l.z * xl + f.z * z);
   });
   rag.len = RAG_LINKS.map(([a, c]) => rag.p[a].distanceTo(rag.p[c]));
@@ -1975,7 +1975,7 @@ function updateCrash(P, dt) {
   bp.yaw += bp.wy * dt; bp.wy *= Math.exp(-3 * dt); bp.roll = damp(bp.roll, bp.rollTo, 7, dt); bp.y = W.surface.height(bp.x, bp.z);
   if (P.cargoProp) stepCargoProp(P, dt);
   const T = TUNING;
-  if (!P.crashHold && !P.respawnQueued && (P.crashT > T.crashAutoRespawn || (P.crashSkip && P.crashT > T.crashMinTime))) { P.respawnQueued = true; fadeTo(() => respawnAfterCrash(P)); }
+  if (!P.crashHold && !P.respawnQueued && (P.crashT > T.crashAutoRespawn || (P.crashSkip && P.crashT > T.crashMinTime))) { if (fadeTo(() => respawnAfterCrash(P))) P.respawnQueued = true; }
   P.crashSkip = false;
 }
 function renderCrash(P) {
@@ -2020,7 +2020,7 @@ function updateCrashCamera(P, alpha, dt) {
 }
 // generic fade (DOM overlay, works with or without the post pass)
 const fadeState = { t: 0, phase: 'none', cb: null, outDur: 0.2, inDur: 0.28 };
-function fadeTo(cb, outDur = 0.2, inDur = 0.28) { Object.assign(fadeState, { t: 0, phase: 'out', cb, outDur, inDur }); }
+function fadeTo(cb, outDur = 0.2, inDur = 0.28) { if (fadeState.phase === 'out') return false; Object.assign(fadeState, { t: 0, phase: 'out', cb, outDur, inDur }); return true; }
 function updateFade(dt) {
   const f = fadeState, el = document.getElementById('fade');
   if (f.phase === 'out') { f.t += dt; el.style.opacity = clamp(f.t / f.outDur, 0, 1); if (f.t >= f.outDur) { const cb = f.cb; f.cb = null; f.phase = 'in'; f.t = 0; if (cb) cb(); } }
@@ -2063,7 +2063,7 @@ function cargoImpulse(P, kind, amount) {
 function updateCargo(P, dt) {
   const c = P.cargo; if (!c) return;
   c.flash = Math.max(0, c.flash - dt * 2);
-  if (P.bike.state !== 'ride') return;
+  if (P.bike.state !== 'ride' || P.onFoot) return;
   const b = P.bike, T = TUNING, fr = c.def.fragility, gain = T.cargoGain;
   // pseudo-forces in bike-local space (+x = bike's left, +z = forward)
   const fz = -b.accel * gain, latAcc = b.latAcc;          // latAcc > 0 when turning left
@@ -2172,6 +2172,7 @@ function updateSignals(dt) {
 }
 function chooseNext(car) { const L = car.path; if (!L.conns || !L.conns.length) return null; const w = c => (c.turn === 'straight' ? 5 : c.turn === 'right' ? 3 : 2); return W.rng.traffic.weighted(L.conns, w); }
 function canEnter(car, c) {
+  for (const o of car.path.cars) if (o !== car && o.s > car.s) return false;
   const sig = laneSignal(car.path);
   if (sig === 'red') return false;
   if (sig === 'yellow') { const dist = car.path.len - car.s - car.len / 2; if (dist > car.v * car.v / (2 * 3.0) + 1) return false; }
@@ -2550,7 +2551,7 @@ const SITUATIONS = [
       return { update() { return null; }, cleanup() { objs.forEach(o => o.removeFromParent()); crew.forEach(hidePed); }, persistent: true };
     } },
   { id: 'crash_customer', rarity: 'common', weight: 10, trigger: 'crash', cooldown: 0, tellSeconds: 0, clip: true, outcomes: ['no tip'],
-    prerequisites(ctx) { const P = ctx.P, o = P.order; if (!o || o.state !== 'toCustomer' || !P.cargo) return false; const e = o.offer.bld.entrance.p; return Math.hypot(P.bike.x - e.x, P.bike.z - e.z) < 25; },
+    prerequisites(ctx) { const P = ctx.P, o = P.order; if (ctx.kind === 'ped' || !o || o.state !== 'toCustomer' || !P.cargo) return false; const e = o.offer.bld.entrance.p; return Math.hypot(P.bike.x - e.x, P.bike.z - e.z) < 25; },
     run(ctx) {
       const P = ctx.P, o = P.order, e = o.offer.bld.entrance, ids = ['CHR_Customer01', 'CHR_Customer02', 'CHR_Customer03', 'CHR_Customer04', 'CHR_Customer05', 'CHR_Customer06'];
       const c = MODULES[ids[(o.offer.id * 7 + Math.floor(o.offer.bld.c.x)) % 6]].build(); c.position.set(e.approach.x, 0, e.approach.z); W.scene.add(c);
@@ -2700,8 +2701,8 @@ function interiorHeight(x, z, yNow) {
   return best;
 }
 function enterBuilding(P) {
-  const o = P.order; if (P.entering) return; P.entering = true;
-  fadeTo(() => {
+  const o = P.order; if (P.entering) return;
+  P.entering = fadeTo(() => {
     P.entering = false;
     const flags = W.director ? W.director.onEnterBuilding(P, o) : {};
     buildInterior(P, o.offer.bld, o, flags);
@@ -2713,8 +2714,8 @@ function enterBuilding(P) {
   }, 0.25, 0.3);
 }
 function exitBuilding(P) {
-  if (!P.onFoot || P.onFoot.exiting) return; P.onFoot.exiting = true;
-  fadeTo(() => {
+  if (!P.onFoot || P.onFoot.exiting) return;
+  P.onFoot.exiting = fadeTo(() => {
     const bld = INT.bld, e = bld.entrance;
     if (P.cargo) { P.cargo.group.removeFromParent(); P.cargo.group.scale.setScalar(1); P.cargoAnchor.add(P.cargo.group); P.cargo.group.position.set(0, 0, 0); P.cargo.group.rotation.set(0, 0, 0); }
     camera.removeFromParent();
@@ -2777,6 +2778,7 @@ function liftPress(P, n) {
   if (n < 1 || n > INT.floors) return;
   if (INT.flags.oddOnly && n % 2 === 0) { sfx('buzz'); toast('Lift: odd floors only'); return; }
   const lvl = n - 1; if (lvl === INT.liftLevel) return;
+  if (fadeState.phase === 'out') return;
   F.phase = 'lift'; ui('liftUI').style.display = 'none'; sfx('ding');
   fadeTo(() => { F.y = lvl * FLOOR_TO_FLOOR; F.py = F.y; F.x = 12.4; F.z = 1.9; F.px = F.x; F.pz = F.z; F.yaw = Math.PI; F.phase = 'walk'; INT.liftLevel = lvl; setTimeout(() => sfx('ding'), 250); }, 0.3, 0.4);
 }
@@ -3310,6 +3312,7 @@ function startWorld(seed, graph = 'district') {
 }
 function onAction(a) {
   const P = players[0]; if (!P) return;
+  if (game.paused && a !== 'pause' && a !== 'mute') return;
   if (a === 'accept') { if (P.onFoot) return interiorInteract(P); if (P.offer) return acceptOffer(P); const o = P.order; if (o && o.state === 'toCustomer') { const ap = o.offer.bld.entrance.approach; if (Math.hypot(P.bike.x - ap.x, P.bike.z - ap.z) < 3.6 && P.bike.state === 'ride') return enterBuilding(P); } return; }
   if (a === 'decline') { if (P.offer) declineOffer(P); return; }
   if (a === 'bell') { sfx('bell'); return; }
@@ -3330,6 +3333,7 @@ addEventListener('keydown', e => {
   if (e.code === 'F2') { const t = ui('tuning'); t.style.display = t.style.display === 'block' ? 'none' : 'block'; return; }
   if (e.code === 'Enter' && game.mode === 'title') { ui('startBtn').click(); return; }
   if (game.mode === 'receipt') return;
+  if (game.paused && e.code !== 'Escape' && e.code !== 'KeyM') return;
   if (/^Digit[1-9]$/.test(e.code) && players[0].onFoot) { liftPress(players[0], +e.code.slice(5)); return; }
   if (e.code === 'Escape' && players[0].onFoot && ui('liftUI').style.display === 'block') { ui('liftUI').style.display = 'none'; return; }
   if (map[e.code] && game.mode !== 'title') onAction(map[e.code]);
@@ -3337,7 +3341,14 @@ addEventListener('keydown', e => {
 addEventListener('keyup', e => KEYS.delete(e.code));
 addEventListener('blur', () => KEYS.clear());
 
+function cleanupShift() {
+  if (W.director) { for (const h of W.director.active) { try { h.cleanup(); } catch (e) { console.warn('situation cleanup', e); } } W.director.active.length = 0; }
+  if (W.markers) { W.markers.pickup.removeFromParent(); W.markers.drop.removeFromParent(); W.markers = null; }
+  fx.steam = fx.steamTarget = 0; hideBubble(); hud.tipCard = null; ui('tipCard').style.display = 'none'; hud.route = [];
+  for (const P of players) { P.crashHold = false; P.crashSkipScene = false; P.lookAtTarget = null; P.entering = false; if (P.bike.state === 'crash') endCrash(P); }
+}
 function beginShift() {
+  cleanupShift();
   ui('title').style.display = 'none'; ui('receipt').style.display = 'none'; game.mode = 'street'; game.paused = false;
   createShift(W); buildMinimapBase(W); audioUnlock();
   W.director = createDirector(W);
@@ -3366,8 +3377,8 @@ function frame(now) {
   const dtReal = Math.min(0.1, (now - last) / 1000); last = now;
   perf.ms = lerp(perf.ms, dtReal * 1000, 0.05); perf.fps = 1000 / perf.ms;
   const P = players[0];
+  if (game.mode === 'street') readInput(P);
   if (game.mode === 'street' && !game.paused) {
-    readInput(P);
     acc += dtReal * game.timeScale;
     let n = 0; while (acc >= DT && n < 6) { tick(DT); acc -= DT; n++; }
     if (n === 6) acc = 0;
@@ -3388,7 +3399,7 @@ function hashSeed() { const m = location.hash.match(/seed=([^&]+)/); return m ? 
 function setSeed(seed) { ui('seedInput').value = seed; if (hashSeed() !== seed) history.replaceState(null, '', '#seed=' + encodeURIComponent(seed)); }
 function freshSeed() { const a = new Uint32Array(1); (crypto && crypto.getRandomValues ? crypto.getRandomValues(a) : (a[0] = Date.now())); return (a[0] >>> 0).toString(36); }
 function dailySeed() { return 'daily-' + new Date().toISOString().slice(0, 10); }
-function loadSeed(seed, thenStart) { setSeed(seed); hideBubble(); camera.removeFromParent(); fadeState.phase = 'none'; ui('fade').style.opacity = 0; if (players[0]) { const P = players[0]; P.onFoot = null; P.entering = false; unloadCargo(P); if (P.bike.state === 'crash') endCrash(P); } INT.scene = null; if (dbg.labels) setLabels(false); startWorld(seed, 'district'); if (thenStart) beginShift(); else showTitle(); }
+function loadSeed(seed, thenStart) { if (W) cleanupShift(); setSeed(seed); hideBubble(); camera.removeFromParent(); fadeState.phase = 'none'; ui('fade').style.opacity = 0; if (players[0]) { const P = players[0]; P.onFoot = null; P.entering = false; unloadCargo(P); if (P.bike.state === 'crash') endCrash(P); } INT.scene = null; if (dbg.labels) setLabels(false); startWorld(seed, 'district'); if (thenStart) beginShift(); else showTitle(); }
 function showTitle() { game.mode = 'title'; game.paused = false; ['pause', 'receipt'].forEach(id => (ui(id).style.display = 'none')); ui('title').style.display = 'flex'; ui('offers').innerHTML = ''; hud.offerKey = ''; }
 function boot() {
   resize(); buildTuningPanel();
