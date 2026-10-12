@@ -1150,7 +1150,8 @@ function genBlockBuildings(W, blk, R) {
   }
   // one enterable delivery building per block: a mid building on a non-avenue street side
   const cands = blds.filter(b => !b.corner && !b.facades[0].side.prof.alley && b.facades[0].side.prof.name !== 'avenue' && b.lu >= 8);
-  if (cands.length) { const d = R.pick(cands); d.delivery = true; d.storeys = R.int(4, 6); }
+  const alleyHalf = blk.sides.some(s => s.prof.alley);
+  if (cands.length && !(alleyHalf && W.alleyDelivery)) { const d = R.pick(cands); d.delivery = true; d.storeys = R.int(4, 6); if (alleyHalf) W.alleyDelivery = true; }
   const rcands = blds.filter(b => !b.corner && !b.delivery && !b.facades[0].side.prof.alley && b.facades[0].side.prof.name !== 'side' && b.lu >= 8);
   if (rcands.length) R.pick(rcands).restaurant = true;
   for (const b of blds) buildBuilding(W, b, R);
@@ -1775,7 +1776,9 @@ const _cv = new THREE.Vector3();
 function updateCamera(P, alpha, dtReal) {
   const T = TUNING;
   if (Math.abs(camera.fov - T.fov) > 0.01) { camera.fov = T.fov; camera.updateProjectionMatrix(); }
-  if (camera.far !== T.drawDistance) { camera.far = T.drawDistance; camera.updateProjectionMatrix(); if (W) W.scene.fog.far = T.drawDistance; }
+  const far = camState.free ? 2000 : T.drawDistance;
+  if (camera.far !== far) { camera.far = far; camera.updateProjectionMatrix(); }
+  W.scene.fog.far = far;
   if (camState.free) return updateFreeCam(dtReal);
   if (P.onFoot) return updateFootCamera(P, alpha);
   const b = P.bike;
@@ -2163,12 +2166,12 @@ function boot() {
   const hashSeed = (location.hash.match(/seed=([^&]+)/) || [])[1];
   const seed = hashSeed ? decodeURIComponent(hashSeed) : 'demo';
   ui('seedInput').value = seed;
-  startWorld(seed, 'oneBlock');
+  startWorld(seed, 'district');
   ui('title').style.display = 'flex';
   ui('startBtn').onclick = beginShift;
   // test hook: advance the fixed-step simulation synchronously (headless tests render slowly)
   const sim = (sec) => { const P = players[0]; for (let i = 0; i < Math.round(sec / DT); i++) { readInput(P); tick(DT); updateFade(DT); } acc = 0; return W.time; };
-  window.__game = { get W() { return W; }, players, TUNING, MODULES, game, KEYS, perf, renderer, sim, onAction, loadCargo, placeBike };
+  window.__game = { get W() { return W; }, players, TUNING, MODULES, game, KEYS, perf, renderer, sim, onAction, loadCargo, placeBike, camState, camera };
   requestAnimationFrame(frame);
 }
 boot();
