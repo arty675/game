@@ -1971,16 +1971,89 @@ function updateFade(dt) {
   else if (f.phase === 'in') { f.t += dt; el.style.opacity = 1 - clamp(f.t / f.inDur, 0, 1); if (f.t >= f.inDur) { f.phase = 'none'; el.style.opacity = 0; } }
 }
 
-// @@SECTION9@@
+// ===================================================================================
+// 9. CARGO — rides in the rear box as a visible prop. A spring-damper in bike-local space
+//    (it never pushes the bike) is driven by acceleration, braking, turning, lean and bumps.
+//    Accumulated abuse moves it intact → damaged → ruined and costs the tip, not the run.
+// ===================================================================================
+const CARGO_STATE_NAMES = ['intact', 'damaged', 'ruined'];
+const CARGO_TIP_FACTOR = [1, 0.4, 0];
+const CARGO_THRESH = [34, 70];
+function loadCargo(P, typeId) {
+  unloadCargo(P);
+  const c = { type: typeId, def: CARGO_TYPES[typeId], abuse: 0, state: 0, ox: 0, oy: 0, oz: 0, vx: 0, vy: 0, vz: 0, group: G(), meshes: [0, 1, 2].map(s => buildCargo(typeId, s)), flash: 0 };
+  c.meshes.forEach((m, i) => { m.visible = i === 0; c.group.add(m); m.traverse(o => { if (o.isMesh) o.castShadow = true; }); });
+  P.cargoAnchor.add(c.group); P.cargo = c; P.parts.lid.rotation.x = -1.9;
+  return c;
+}
+function unloadCargo(P) { if (P.cargo) P.cargo.group.removeFromParent(); P.cargo = null; P.cargoProp = null; P.parts.lid.rotation.x = 0; }
+function setCargoState(P, s) {
+  const c = P.cargo; if (s <= c.state) return;
+  c.state = s; c.meshes.forEach((m, i) => (m.visible = i === s)); c.flash = 1;
+  sfx('crunch', s); P.events.push('cargo' + CARGO_STATE_NAMES[s]);
+  if (W.director) W.director.onCargoDamage(P, s);
+}
+function addAbuse(P, amount) {
+  const c = P.cargo; if (!c || amount <= 0) return;
+  c.abuse = Math.min(100, c.abuse + amount * TUNING.abuseScale);
+  if (c.abuse >= CARGO_THRESH[1]) setCargoState(P, 2); else if (c.abuse >= CARGO_THRESH[0]) setCargoState(P, 1);
+}
+// one-off jolts from curbs, drops, scrapes (amount ≈ suspension kick in metres)
+function cargoImpulse(P, kind, amount) {
+  const c = P.cargo; if (!c || P.bike.state !== 'ride') return;
+  c.vy += amount * 14 * TUNING.cargoGain; c.vz -= amount * 4; c.vx += (W.rng.fx.float() - 0.5) * amount * 6;
+  addAbuse(P, amount * 220 * c.def.fragility.bump);
+}
+function updateCargo(P, dt) {
+  const c = P.cargo; if (!c) return;
+  c.flash = Math.max(0, c.flash - dt * 2);
+  if (P.bike.state !== 'ride') return;
+  const b = P.bike, T = TUNING, fr = c.def.fragility, gain = T.cargoGain;
+  // pseudo-forces in bike-local space (+x = bike's left, +z = forward)
+  const fz = -b.accel * gain, latAcc = b.latAcc;          // latAcc > 0 when turning left
+  const fxl = (-latAcc - G_ACC * Math.sin(b.lean)) * gain;
+  const k = T.cargoSpring, d = T.cargoDamping;
+  c.vx += (fxl * 0.02 - k * c.ox - d * c.vx) * dt; c.vz += (fz * 0.02 - k * c.oz - d * c.vz) * dt; c.vy += (-k * 1.6 * c.oy - d * c.vy) * dt;
+  c.ox += c.vx * dt; c.oz += c.vz * dt; c.oy += c.vy * dt;
+  c.ox = clamp(c.ox, -0.08, 0.08); c.oz = clamp(c.oz, -0.08, 0.08); c.oy = clamp(c.oy, -0.03, 0.12);
+  // abuse: rates per second above comfort thresholds, weighted by fragility
+  const a = Math.abs(b.accel), lat = Math.abs(latAcc), lean = Math.abs(b.lean);
+  let rate = Math.max(0, a - 3.2) * fr.accel * 9 + Math.max(0, lat - 2.5) * fr.lateral * 6 + Math.max(0, lean - 12 * DEG) * fr.lean * 25;
+  if (b.skid > 0.5) rate += 4 * fr.accel;
+  addAbuse(P, rate * dt);
+  // visual: offset + tilt in the box
+  c.group.position.set(c.ox, Math.max(0, c.oy), c.oz);
+  c.group.rotation.set(clamp(c.oz * 4, -0.35, 0.35), 0, clamp(-c.ox * 4, -0.35, 0.35));
+}
+function cargoCrash(P, vx, vz, sp) {
+  const c = P.cargo; addAbuse(P, 45 * c.def.fragility.crash * clamp(sp / 5, 0.4, 1.4));
+  const wp = new THREE.Vector3(); c.group.getWorldPosition(wp);
+  c.group.removeFromParent(); W.scene.add(c.group); c.group.position.copy(wp);
+  const R = W.rng.fx;
+  P.cargoProp = { p: wp, v: new THREE.Vector3(vx * 0.9, 2.6 + sp * 0.12, vz * 0.9), w: new THREE.Vector3(R.range(-8, 8), R.range(-6, 6), R.range(-8, 8)), rot: new THREE.Euler(0, P.bike.heading, 0), landed: false };
+}
+function stepCargoProp(P, dt) {
+  const cp = P.cargoProp, c = P.cargo; if (!cp || !c) return;
+  cp.v.y -= G_ACC * dt; cp.p.addScaledVector(cp.v, dt);
+  const gy = W.surface.height(cp.p.x, cp.p.z);
+  if (cp.p.y < gy) { cp.p.y = gy; if (cp.v.y < -1) { cp.v.y *= -0.3; sfx('thud', 0.5); } else cp.v.y = 0; cp.v.x *= 0.7; cp.v.z *= 0.7; cp.w.multiplyScalar(0.6); if (!cp.landed) { cp.landed = true; addAbuse(P, 10 * c.def.fragility.crash); } }
+  W.grid.query(cp.p.x, cp.p.z, 0.5, _near); for (const col of _near) { if (cp.p.y > col.y1) continue; const h = circleOBB(cp.p.x, cp.p.z, 0.2, col); if (h) { cp.p.x += h.nx * h.pen; cp.p.z += h.nz * h.pen; const vn = cp.v.x * h.nx + cp.v.z * h.nz; if (vn < 0) { cp.v.x -= 1.4 * vn * h.nx; cp.v.z -= 1.4 * vn * h.nz; } } }
+  if (cp.p.y <= gy + 1e-3) { cp.rot.x = damp(cp.rot.x, Math.round(cp.rot.x / (Math.PI / 2)) * Math.PI / 2, 8, dt); cp.rot.z = damp(cp.rot.z, Math.round(cp.rot.z / (Math.PI / 2)) * Math.PI / 2, 8, dt); }
+  else { cp.rot.x += cp.w.x * dt; cp.rot.y += cp.w.y * dt; cp.rot.z += cp.w.z * dt; }
+  c.group.position.copy(cp.p); c.group.rotation.copy(cp.rot);
+}
+function cargoReattach(P) {
+  const c = P.cargo; if (!c) return;
+  c.group.removeFromParent(); P.cargoAnchor.add(c.group); c.group.position.set(0, 0, 0); c.group.rotation.set(0, 0, 0);
+  c.ox = c.oy = c.oz = c.vx = c.vy = c.vz = 0; P.cargoProp = null;
+}
+
+// @@SECTION10@@
 // @@STUBS_BEGIN@@ (temporary: replaced by real sections in later delivery steps)
-function cargoImpulse() {}
 function collideDynamic() {}
 function breakCleanLine() {}
 function sfx() {}
 function updateFootCamera() {}
-function cargoCrash() {}
-function cargoReattach() {}
-function stepCargoProp() {}
 function clearChain(P) { P.chain.mult = 1; P.chain.points = 0; P.chain.count = 0; }
 // @@STUBS_END@@
 
@@ -2038,6 +2111,7 @@ addEventListener('keydown', e => {
   KEYS.add(e.code); if (e.repeat) return;
   for (const P of players) if (P.bike.state === 'crash' && e.code !== 'KeyR') P.crashSkip = true;
   const map = { KeyV: 'camera', KeyR: 'restart', Escape: 'pause', KeyE: 'accept', KeyQ: 'decline', KeyB: 'bell', KeyM: 'mute' };
+  if (e.code === 'KeyC' && game.mode !== 'title') { const ids = Object.keys(CARGO_TYPES), P = players[0]; const i = P.cargo ? (ids.indexOf(P.cargo.type) + 1) % (ids.length + 1) : 0; if (i < ids.length) loadCargo(P, ids[i]); else unloadCargo(P); return; }
   if (e.code === 'F2') { const t = ui('tuning'); t.style.display = t.style.display === 'block' ? 'none' : 'block'; return; }
   if (e.code === 'Enter' && game.mode === 'title') { beginShift(); return; }
   if (map[e.code] && game.mode !== 'title') onAction(map[e.code]);
@@ -2052,11 +2126,15 @@ function tick(dt) {
     snapshotBike(P.bike);
     if (P.bike.state === 'ride') updateBike(P, dt);
     else if (P.bike.state === 'crash') updateCrash(P, dt);
+    updateCargo(P, dt);
     P.events.length = 0;
   }
 }
 function updateHUD(P) {
   ui('spd').textContent = Math.round(Math.hypot(P.bike.vx, P.bike.vz) * 3.6);
+  const c = P.cargo; ui('cargoBox').style.display = c ? 'block' : 'none';
+  if (c) { ui('cargoName').textContent = c.def.name; ui('cargoIco').textContent = c.def.icon; ui('cargoState').textContent = CARGO_STATE_NAMES[c.state]; ui('cargoState').style.color = ['var(--good)', 'var(--warn)', 'var(--bad)'][c.state];
+    const bar = ui('cargoBar'); bar.style.width = c.abuse.toFixed(0) + '%'; bar.style.background = ['var(--good)', 'var(--warn)', 'var(--bad)'][c.state]; ui('cargoBox').style.transform = c.flash > 0 ? `scale(${1 + c.flash * 0.15})` : ''; }
 }
 let acc = 0, last = performance.now();
 const perf = { fps: 60, ms: 16 };
@@ -2090,7 +2168,7 @@ function boot() {
   ui('startBtn').onclick = beginShift;
   // test hook: advance the fixed-step simulation synchronously (headless tests render slowly)
   const sim = (sec) => { const P = players[0]; for (let i = 0; i < Math.round(sec / DT); i++) { readInput(P); tick(DT); updateFade(DT); } acc = 0; return W.time; };
-  window.__game = { get W() { return W; }, players, TUNING, MODULES, game, KEYS, perf, renderer, sim, onAction };
+  window.__game = { get W() { return W; }, players, TUNING, MODULES, game, KEYS, perf, renderer, sim, onAction, loadCargo, placeBike };
   requestAnimationFrame(frame);
 }
 boot();
