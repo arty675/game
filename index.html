@@ -2380,11 +2380,320 @@ function updateScoring(P, dt) {
   if (ch.cleanT > TUNING.cleanLineSeconds) { ch.cleanT = 0; addChain(P, 'CLEAN LINE'); }
 }
 
-// @@SECTION14@@
-// @@STUBS_BEGIN@@ (temporary: replaced by real sections in later delivery steps)
-function sfx() {}
-function updateFootCamera() {}
-// @@STUBS_END@@
+// ---- shift, offers, orders (host-owned state lives on W; players hold references) ----
+const APP_NAME = 'SnackGoblin';
+const APT_LETTERS = ['A', 'B', 'C'];
+function createShift(W) {
+  W.shift = { t: 0, len: TUNING.shiftMinutes * 60, over: false, overT: 0, ended: false, nextOfferT: 2.5, offerSeq: 0 };
+  W.orders = { list: [] };
+  W.markers = { pickup: makeMarker(0xf07a1a), drop: makeMarker(0x5fd3e6) };
+  buildNav(W);
+}
+function makeMarker(color) {
+  const g = G(), mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.2, depthWrite: false, side: THREE.DoubleSide });
+  const beam = new THREE.Mesh(new THREE.CylinderGeometry(0.7, 0.7, 26, 16, 1, true), mat); beam.position.y = 13; g.add(beam);
+  const ring = new THREE.Mesh(new THREE.RingGeometry(1.0, 1.35, 28), new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 0.85, side: THREE.DoubleSide, depthWrite: false })); ring.rotation.x = -Math.PI / 2; ring.position.y = 0.04; g.add(ring);
+  g.visible = false; W.scene.add(g); return g;
+}
+// navigation grid (2 m, 4-connected BFS distance fields) for route hints and offer distances
+function buildNav(W) {
+  const res = 2, b = W.bounds, x0 = b.x0 - 2, z0 = b.z0 - 2, nx = Math.ceil((b.x1 - x0 + 2) / res), nz = Math.ceil((b.z1 - z0 + 2) / res);
+  const pass = new Uint8Array(nx * nz);
+  for (let k = 0; k < nz; k++) for (let i = 0; i < nx; i++) {
+    const x = x0 + (i + 0.5) * res, z = z0 + (k + 0.5) * res, c = W.surface.codeAt(x, z);
+    let ok = c >= 1; if (ok) { W.grid.query(x, z, 0.5, _near); if (_near.some(o => o.kind === 'building' && Math.abs(x - o.cx) < o.hx && Math.abs(z - o.cz) < o.hz)) ok = false; }
+    pass[k * nx + i] = ok ? 1 : 0;
+  }
+  W.nav = { res, x0, z0, nx, nz, pass, cache: new Map() };
+}
+function navCell(x, z) { const N = W.nav; return [clamp(Math.floor((x - N.x0) / N.res), 0, N.nx - 1), clamp(Math.floor((z - N.z0) / N.res), 0, N.nz - 1)]; }
+function navField(target) {
+  const N = W.nav, key = Math.round(target.x) + ',' + Math.round(target.z);
+  if (N.cache.has(key)) return N.cache.get(key);
+  const d = new Int32Array(N.nx * N.nz).fill(-1), q = new Int32Array(N.nx * N.nz); let h = 0, t = 0;
+  let [ti, tk] = navCell(target.x, target.z);
+  if (!N.pass[tk * N.nx + ti]) { let best = null; for (let r = 1; r < 6 && !best; r++) for (let dk = -r; dk <= r; dk++) for (let di = -r; di <= r; di++) { const i = ti + di, k = tk + dk; if (i >= 0 && k >= 0 && i < N.nx && k < N.nz && N.pass[k * N.nx + i] && !best) best = [i, k]; } if (best) [ti, tk] = best; }
+  d[tk * N.nx + ti] = 0; q[t++] = tk * N.nx + ti;
+  while (h < t) { const c = q[h++], i = c % N.nx, k = (c / N.nx) | 0; for (const [di, dk] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const ii = i + di, kk = k + dk; if (ii < 0 || kk < 0 || ii >= N.nx || kk >= N.nz) continue; const n = kk * N.nx + ii; if (d[n] < 0 && N.pass[n]) { d[n] = d[c] + 1; q[t++] = n; } } }
+  if (N.cache.size > 24) N.cache.clear();
+  N.cache.set(key, d); return d;
+}
+function navDistance(from, to) { const d = navField(to), [i, k] = navCell(from.x, from.z); let best = d[k * W.nav.nx + i]; if (best < 0) for (const [di, dk] of [[1, 0], [-1, 0], [0, 1], [0, -1], [2, 0], [-2, 0], [0, 2], [0, -2]]) { const n = (k + dk) * W.nav.nx + (i + di); if (d[n] >= 0 && (best < 0 || d[n] < best)) best = d[n]; } return best < 0 ? vlen(vsub(from, to)) * 1.3 : best * W.nav.res; }
+function navRoute(from, to, maxPts = 80) {
+  const N = W.nav, d = navField(to); let [i, k] = navCell(from.x, from.z); const pts = [];
+  if (d[k * N.nx + i] < 0) { for (const [di, dk] of [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, -1], [1, -1], [-1, 1]]) { const n = (k + dk) * N.nx + (i + di); if (d[n] >= 0) { i += di; k += dk; break; } } }
+  for (let step = 0; step < 400 && pts.length < maxPts; step++) {
+    const c = k * N.nx + i, dv = d[c]; if (dv <= 0) break;
+    if (step % 2 === 0) pts.push(v(N.x0 + (i + 0.5) * N.res, N.z0 + (k + 0.5) * N.res));
+    let moved = false; for (const [di, dk] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const ii = i + di, kk = k + dk; const n = kk * N.nx + ii; if (ii >= 0 && kk >= 0 && ii < N.nx && kk < N.nz && d[n] >= 0 && d[n] < dv) { i = ii; k = kk; moved = true; break; } }
+    if (!moved) break;
+  }
+  pts.push(v(to.x, to.z)); return pts;
+}
+function makeOffer(P) {
+  const R = W.rng.orders, sh = W.shift; sh.offerSeq++;
+  // fixed number of draws per offer so the i-th offer of a seed is always the same order
+  const rest = W.restaurants[Math.floor(R.float() * W.restaurants.length)], bld = W.deliveryBuildings[Math.floor(R.float() * W.deliveryBuildings.length)];
+  const floor = 2 + Math.floor(R.float() * Math.max(1, bld.storeys - 1)), letter = APT_LETTERS[Math.floor(R.float() * 3)];
+  const cargo = R.weighted(Object.keys(CARGO_TYPES), id => ({ CARGO_TakeawayBag: 4, CARGO_PizzaStack: 3, CARGO_WeddingCake: 1.2, CARGO_GoldfishBag: 1.5 })[id]);
+  const noisePay = R.float(), noiseTip = R.float(), baitRoll = R.float();
+  const d1 = navDistance(P.bike, rest.approach), d2 = navDistance(rest.approach, bld.entrance.approach);
+  const quality = clamp(1 - 0.1 * Math.max(0, P.declines - 1), 0.5, 1);
+  const surcharge = { CARGO_TakeawayBag: 0, CARGO_PizzaStack: 2, CARGO_WeddingCake: 4.5, CARGO_GoldfishBag: 2.5 }[cargo];
+  const pay = Math.round((3.5 + d2 / 100 * 1.25 + surcharge + noisePay * 1.5) * quality * 100) / 100;
+  const bait = W.director ? W.director.wantsBait(baitRoll) : false;
+  const tipEst = Math.round((bait ? 13 + noiseTip * 6 : 2 + noiseTip * 4 + surcharge * 0.6) * quality * 100) / 100;
+  return { id: sh.offerSeq, rest, bld, floor, letter, apt: floor + letter, cargo, pay, tipEst, bait, d1, d2, dist: d1 + d2, expires: sh.t + TUNING.offerTimeout, quality };
+}
+function acceptOffer(P) {
+  const o = P.offer; if (!o) return; P.offer = null; P.declines = Math.max(0, (P.declines || 0) - 1);
+  const eta = (o.d1 + o.d2) / 5.6 + 28;
+  P.order = { offer: o, state: 'toRestaurant', acceptT: W.shift.t, eta, pin: null, hold: 0 };
+  W.orders.list.push(P.order);
+  appNotify(`Order #${o.id} accepted. ${o.rest ? 'Pickup' : ''} ${CARGO_TYPES[o.cargo].icon}  ETA ${Math.round(eta / 60)}:${String(Math.round(eta % 60)).padStart(2, '0')}`);
+  if (W.director) W.director.onAccept(P, P.order);
+  sfx('ping');
+}
+function declineOffer(P) { if (!P.offer) return; P.offer = null; P.declines = (P.declines || 0) + 1; W.shift.nextOfferT = W.shift.t + TUNING.offerEvery; if (P.declines >= 3) appNotify('Declining hurts your Goblin Score™. Offers may get… smaller.'); }
+function orderTarget(P) {
+  const o = P.order; if (!o) return null;
+  if (o.state === 'toRestaurant') return o.offer.rest.approach;
+  if (o.state === 'toCustomer') return o.pin || o.offer.bld.entrance.approach;
+  return null;
+}
+function updateShift(dt) {
+  const sh = W.shift; if (!sh || sh.ended) return;
+  sh.t += dt;
+  const P = players[0];
+  if (!sh.over && sh.t >= sh.len) { sh.over = true; P.offer = null; appNotify(P.order ? 'Shift is over — finish this one. Clock is still running.' : 'Shift over. Go home. (You can\'t afford rent.)'); }
+  if (sh.over) { sh.overT += dt; if (!P.order || sh.overT > 75) return endShift(); }
+  if (!P.order && !P.offer && !sh.over && sh.t >= sh.nextOfferT) { P.offer = makeOffer(P); sfx('ping'); }
+  if (P.offer && sh.t > P.offer.expires) { P.offer = null; sh.nextOfferT = sh.t + 1.5; }
+  const o = P.order; if (!o || P.onFoot) return;
+  const b = P.bike, sp = Math.hypot(b.vx, b.vz);
+  if (o.state === 'toRestaurant') {
+    const a = o.offer.rest.approach, d = Math.hypot(b.x - a.x, b.z - a.z);
+    if (d < 3.4 && sp < 1.8 && b.state === 'ride') { o.hold += dt; if (o.hold > 0.7) pickUp(P); } else o.hold = 0;
+  }
+}
+function pickUp(P) {
+  const o = P.order; o.state = 'toCustomer'; o.pickT = W.shift.t; o.hold = 0;
+  loadCargo(P, o.offer.cargo); sfx('coin');
+  appNotify(`${CARGO_TYPES[o.offer.cargo].icon} Picked up. Deliver to Apt ${o.offer.apt}. Customer note: "${pickNote(o.offer.cargo)}"`);
+  if (W.director) W.director.onPickup(P, o);
+}
+function pickNote(cargo) { return W.rng.fx.pick({ CARGO_TakeawayBag: ['extra napkins pls', 'no onions (there are onions)', 'hurry I am starving'], CARGO_PizzaStack: ['keep them FLAT', 'it is for a party (I am alone)', 'do not tilt. I will know.'], CARGO_WeddingCake: ['the wedding is in 20 min', 'please no bumps', 'it is load-bearing'], CARGO_GoldfishBag: ['his name is Gerald', 'Gerald hates potholes', 'no sudden moves'] }[cargo]); }
+// the drop-off: delivery building door (interior flow in section 13 calls finishDelivery)
+function finishDelivery(P, viaCrash = false) {
+  const o = P.order; if (!o) return;
+  const late = Math.max(0, W.shift.t - (o.acceptT + o.eta)), st = P.cargo ? P.cargo.state : 2;
+  let tip = o.offer.tipEst * CARGO_TIP_FACTOR[st] * clamp(1 - late / 90, 0.15, 1);
+  if (viaCrash) tip = 0;
+  if (o.offer.bait && !viaCrash) tip = 1;
+  tip = Math.round(tip * 100) / 100;
+  const mult = P.chain.mult, bonus = Math.round(o.offer.pay * (mult - 1) * 100) / 100;
+  P.stats.orders++; P.stats.pay += o.offer.pay; P.stats.tips += tip; P.stats.bonus += bonus;
+  if (P.chain.count) popup(`BANKED ×${mult.toFixed(1)}  +${money(bonus)}`, 'good');
+  clearChain(P, 'bank');
+  o.state = 'done'; o.result = { tip, late, st, bonus }; P.order = null;
+  W.shift.nextOfferT = W.shift.t + 3;
+  unloadCargo(P);
+  showTipCard(o, tip, bonus, late, st, viaCrash);
+  if (W.director) W.director.onDelivered(P, o);
+}
+function endShift() {
+  const sh = W.shift; if (sh.ended) return; sh.ended = true; game.mode = 'receipt';
+  const P = players[0], img = ui('receiptImg'); img.src = receiptCanvas(P).toDataURL('image/png');
+  ui('receipt').style.display = 'flex';
+}
+function receiptCanvas(P) {
+  const c = document.createElement('canvas'); c.width = 1080; c.height = 1920; const g = c.getContext('2d'), s = P.stats;
+  g.fillStyle = '#26292d'; g.fillRect(0, 0, 1080, 1920);
+  g.fillStyle = '#f3efe4'; g.beginPath(); g.moveTo(120, 150); for (let x = 120; x <= 960; x += 40) g.lineTo(x + 20, x % 80 ? 170 : 150); g.lineTo(960, 1750); for (let x = 960; x >= 120; x -= 40) g.lineTo(x - 20, x % 80 ? 1730 : 1750); g.closePath(); g.fill();
+  g.fillStyle = '#1b1c1e'; g.textAlign = 'center'; g.font = 'bold 64px ui-monospace, Menlo, monospace'; g.fillText(APP_NAME.toUpperCase(), 540, 290);
+  g.font = '34px ui-monospace, Menlo, monospace'; g.fillText('SHIFT RECEIPT — COURIER COPY', 540, 345);
+  g.fillText(new Date().toISOString().slice(0, 10) + '  ·  seed ' + game.seed, 540, 395);
+  g.textAlign = 'left'; g.font = '40px ui-monospace, Menlo, monospace';
+  const total = s.pay + s.tips + s.bonus;
+  const rows = [['Orders delivered', String(s.orders)], ['Base pay', money(s.pay)], ['Tips', money(s.tips)], ['Chain bonuses', money(s.bonus)], ['Crashes', String(s.crashes)], ['Near misses', String(s.nearMisses)], ['Best chain', '×' + s.bestChain.toFixed(1)]];
+  rows.forEach(([k, val], i) => {
+    const y = 520 + i * 78; g.fillText(k, 180, y); g.textAlign = 'right'; g.fillText(val, 900, y); g.textAlign = 'left';
+    const x0 = 180 + g.measureText(k).width + 16, x1 = 900 - g.measureText(val).width - 16; g.fillStyle = '#9a958a'; for (let x = x0; x < x1; x += 22) g.fillRect(x, y - 10, 5, 5); g.fillStyle = '#1b1c1e';
+  });
+  g.fillRect(180, 1100, 720, 4);
+  g.font = 'bold 72px ui-monospace, Menlo, monospace'; g.fillText('TOTAL', 180, 1210); g.textAlign = 'right'; g.fillText(money(total), 900, 1210); g.textAlign = 'center';
+  g.font = '28px ui-monospace, Menlo, monospace'; g.fillStyle = '#4a4740';
+  const quip = s.crashes > 3 ? 'Every crash is a learning opportunity.' : s.tips < 3 ? 'Customer satisfaction: inconclusive.' : 'Rated 4.2 stars by people who never look up.';
+  g.fillText(quip, 540, 1320); g.fillText('No refunds. No benefits. No helmet stipend.', 540, 1370);
+  g.fillStyle = '#1b1c1e'; const R = new RNG(game.seed + 'barcode'); for (let x = 260; x < 820; x += 6) if (R.chance(0.6)) g.fillRect(x, 1480, R.chance(0.3) ? 6 : 3, 140);
+  g.fillStyle = '#f07a1a'; g.fillRect(120, 1790, 840, 14);
+  return c;
+}
+
+// ===================================================================================
+// 15. HUD — speed, multiplier/chain, cargo, timer, offer cards, phone notifications,
+//     minimap with route hint, prompts, tip reveal, speech bubble, procedural audio
+// ===================================================================================
+const hud = { offerKey: '', mapT: 0, map: null, route: [], routeT: 0, tipT: 0, phoneTex: null, phoneT: 0 };
+function appNotify(text) {
+  const box = ui('phone'), d = document.createElement('div'); d.className = 'note'; d.innerHTML = `<b>${APP_NAME}</b> · ${text}`;
+  box.appendChild(d); while (box.children.length > 3) box.firstChild.remove();
+  setTimeout(() => d.remove(), 5200); sfx('ping');
+}
+function renderOffer(P) {
+  const o = P.offer, key = o ? o.id + ':' + Math.ceil(o.expires - W.shift.t) : '';
+  if (key === hud.offerKey) return; hud.offerKey = key;
+  const box = ui('offers');
+  if (!o) { box.innerHTML = ''; return; }
+  const left = clamp((o.expires - W.shift.t) / TUNING.offerTimeout, 0, 1);
+  box.innerHTML = `<div class="offer"><div class="meta">New order · ${CARGO_TYPES[o.cargo].icon} ${CARGO_TYPES[o.cargo].name}</div>
+    <div class="pay">${money(o.pay)} <span class="tip">+ ~${money(o.tipEst)} tip</span></div>
+    <div class="meta">${(o.dist / 1000).toFixed(2)} km · Apt ${o.apt}${o.quality < 1 ? ' · offers shrinking' : ''}</div>
+    <div class="keys"><kbd>E</kbd> accept &nbsp; <kbd>Q</kbd> decline</div><div class="tbar"><i style="width:${(left * 100).toFixed(0)}%"></i></div></div>`;
+}
+function showTipCard(o, tip, bonus, late, st, viaCrash) {
+  hud.tipCard = { o, tip, bonus, late, st, viaCrash, t: 0, shown: o.offer.bait ? o.offer.tipEst : tip };
+  ui('tipCard').style.display = 'block';
+}
+function updateTipCard(dt) {
+  const tc = hud.tipCard; if (!tc) return; tc.t += dt;
+  const o = tc.o, bait = o.offer.bait && !tc.viaCrash;
+  let shown;
+  if (bait) { shown = tc.t < 1.2 ? o.offer.tipEst * smooth(0, 1, tc.t / 1.2) : tc.t < 2.0 ? o.offer.tipEst : lerp(o.offer.tipEst, 1, smooth(2.0, 2.6, tc.t)); if (tc.t > 2.0 && !tc.sad) { tc.sad = true; sfx('sad'); } }
+  else shown = tc.tip * smooth(0, 1, tc.t / 0.9);
+  if (!tc.coin && !bait && tc.t > 0.9) { tc.coin = true; sfx(tc.tip > 0 ? 'coin' : 'sad'); }
+  ui('tipAmt').textContent = money(shown); ui('tipAmt').style.color = (bait && tc.t > 2.2) || tc.tip <= 0.01 ? 'var(--bad)' : 'var(--good)';
+  ui('tipTitle').textContent = tc.viaCrash ? 'Tip (customer took it off your body)' : 'Tip';
+  ui('tipSub').innerHTML = `Pay ${money(o.offer.pay)} · chain bonus ${money(tc.bonus)}<br>${['Cargo intact', 'Cargo damaged (−60% tip)', 'Cargo ruined (no tip)'][tc.st]}${tc.late > 1 ? ` · ${Math.round(tc.late)} s late` : ''}${bait && tc.t > 2.2 ? '<br>Tip adjusted by customer after delivery.' : ''}`;
+  if (tc.t > 4.6) { hud.tipCard = null; ui('tipCard').style.display = 'none'; }
+}
+function setPrompt(html) { const el = ui('prompt'); if (el._h !== html) { el._h = html; el.innerHTML = html ? `<span class="panel" style="display:inline-block">${html}</span>` : ''; } }
+function buildMinimapBase(W) {
+  const b = W.bounds, pad = 14, sc = 2, cw = Math.ceil((b.x1 - b.x0 + pad * 2) * sc), ch = Math.ceil((b.z1 - b.z0 + pad * 2) * sc);
+  const c = document.createElement('canvas'); c.width = cw; c.height = ch; const g = c.getContext('2d');
+  g.fillStyle = '#2a2420'; g.fillRect(0, 0, cw, ch);
+  const S = W.surface, cols = { 1: '#4a4d52', 2: '#8d877c', 3: '#8d877c', 4: '#6d6a63' };
+  for (let z = b.z0 - pad; z < b.z1 + pad; z += 0.5) for (let x = b.x0 - pad; x < b.x1 + pad; x += 0.5) { const code = S.codeAt(x, z); if (code) { g.fillStyle = cols[code]; g.fillRect((x - b.x0 + pad) * sc, (z - b.z0 + pad) * sc, 1, 1); } }
+  for (const L of W.lanes) if (L.type === 'bike') { g.strokeStyle = '#3b8857'; g.lineWidth = 3; g.beginPath(); g.moveTo((L.a.x - b.x0 + pad) * sc, (L.a.z - b.z0 + pad) * sc); g.lineTo((L.b.x - b.x0 + pad) * sc, (L.b.z - b.z0 + pad) * sc); g.stroke(); }
+  hud.map = { c, sc, ox: b.x0 - pad, oz: b.z0 - pad };
+}
+function drawMinimap(P) {
+  const cv = ui('minimap'), g = cv.getContext('2d'), m = hud.map; if (!m) return;
+  const b = P.onFoot ? P.onFoot.streetPos : P.bike, S = cv.width, zoom = 1.6;
+  g.save(); g.clearRect(0, 0, S, S); g.beginPath(); g.arc(S / 2, S / 2, S / 2 - 2, 0, Math.PI * 2); g.clip();
+  g.fillStyle = '#16181b'; g.fillRect(0, 0, S, S);
+  g.translate(S / 2, S / 2 + S * 0.12); g.rotate(Math.PI + (P.onFoot ? 0 : P.bike.heading)); g.scale(zoom, zoom);
+  g.translate(-(b.x - m.ox) * m.sc, -(b.z - m.oz) * m.sc);
+  g.drawImage(m.c, 0, 0);
+  if (hud.route.length > 1) { g.strokeStyle = '#5fd3e6'; g.lineWidth = 5; g.lineJoin = 'round'; g.beginPath(); hud.route.forEach((p, i) => { const X = (p.x - m.ox) * m.sc, Z = (p.z - m.oz) * m.sc; if (i) g.lineTo(X, Z); else g.moveTo(X, Z); }); g.stroke(); }
+  const tgt = orderTarget(P); if (tgt) { g.fillStyle = P.order.state === 'toRestaurant' ? '#f07a1a' : '#5fd3e6'; g.beginPath(); g.arc((tgt.x - m.ox) * m.sc, (tgt.z - m.oz) * m.sc, 9, 0, Math.PI * 2); g.fill(); }
+  if (W.traffic) { g.fillStyle = '#d9d4c8'; for (const c of W.traffic.cars) g.fillRect((c.x - m.ox) * m.sc - 3, (c.z - m.oz) * m.sc - 3, 6, 6); }
+  g.restore();
+  g.fillStyle = '#f07a1a'; g.beginPath(); g.moveTo(S / 2, S / 2 + S * 0.12 - 14); g.lineTo(S / 2 - 9, S / 2 + S * 0.12 + 10); g.lineTo(S / 2 + 9, S / 2 + S * 0.12 + 10); g.closePath(); g.fill();
+}
+// phone on the handlebar mount shows a route arrow (diegetic hint, never blocks the view)
+function updatePhoneScreen(P) {
+  if (!hud.phoneTex) { const c = document.createElement('canvas'); c.width = 64; c.height = 112; hud.phoneTex = new THREE.CanvasTexture(c); hud.phoneTex.colorSpace = THREE.SRGBColorSpace; hud.phoneCanvas = c; const scr = new THREE.Mesh(new THREE.PlaneGeometry(0.072, 0.13), new THREE.MeshBasicMaterial({ map: hud.phoneTex })); scr.position.set(0, 0, -0.0065); scr.rotation.y = Math.PI; P.parts.phone.add(scr); scr.scale.set(1 / 0.085, 1 / 0.15, 1); }
+  const g = hud.phoneCanvas.getContext('2d'); g.fillStyle = '#101214'; g.fillRect(0, 0, 64, 112);
+  const tgt = orderTarget(P);
+  if (tgt && hud.route.length > 1) {
+    const b = P.bike; let aim = hud.route[Math.min(3, hud.route.length - 1)]; for (const p of hud.route) if (Math.hypot(p.x - b.x, p.z - b.z) > 9) { aim = p; break; }
+    const ang = wrapAngle(Math.atan2(aim.x - b.x, aim.z - b.z) - b.heading);
+    g.save(); g.translate(32, 52); g.rotate(-ang); g.fillStyle = P.order.state === 'toRestaurant' ? '#f07a1a' : '#5fd3e6'; g.beginPath(); g.moveTo(0, -24); g.lineTo(16, 10); g.lineTo(0, 2); g.lineTo(-16, 10); g.closePath(); g.fill(); g.restore();
+    g.fillStyle = '#e6e3da'; g.font = 'bold 14px sans-serif'; g.textAlign = 'center'; g.fillText(Math.round(navDistance(b, tgt)) + ' m', 32, 100);
+  } else { g.fillStyle = '#3b3f45'; g.fillRect(16, 40, 32, 32); }
+  hud.phoneTex.needsUpdate = true;
+}
+function updateHUD(P, dt) {
+  ui('spd').textContent = Math.round(Math.hypot(P.bike.vx, P.bike.vz) * 3.6);
+  ui('mult').textContent = '×' + P.chain.mult.toFixed(1); ui('chain').textContent = P.chain.count ? `chain ${P.chain.count} · ${P.chain.points} pts unbanked` : 'chain 0';
+  const c = P.cargo; ui('cargoBox').style.display = c ? 'block' : 'none';
+  if (c) { ui('cargoName').textContent = c.def.name; ui('cargoIco').textContent = c.def.icon; ui('cargoState').textContent = CARGO_STATE_NAMES[c.state]; ui('cargoState').style.color = ['var(--good)', 'var(--warn)', 'var(--bad)'][c.state];
+    const bar = ui('cargoBar'); bar.style.width = c.abuse.toFixed(0) + '%'; bar.style.background = ['var(--good)', 'var(--warn)', 'var(--bad)'][c.state]; ui('cargoBox').style.transform = c.flash > 0 ? `scale(${1 + c.flash * 0.15})` : ''; }
+  const sh = W.shift;
+  if (sh) { const left = Math.max(0, sh.len - sh.t); ui('timer').textContent = sh.over ? `overtime ${Math.floor(sh.overT)} s` : `${Math.floor(left / 60)}:${String(Math.floor(left % 60)).padStart(2, '0')}`; ui('timer').style.color = left < 30 ? 'var(--bad)' : ''; }
+  renderOffer(P); updateTipCard(dt);
+  // prompts
+  let pr = '';
+  const o = P.order, b = P.bike;
+  if (P.bike.state === 'crash') pr = P.crashT > TUNING.crashMinTime ? 'Any key — get up' : '';
+  else if (o && !P.onFoot) {
+    if (o.state === 'toRestaurant') { const a = o.offer.rest.approach, d = Math.hypot(b.x - a.x, b.z - a.z); if (d < 6) pr = o.hold > 0 ? 'Picking up… hold still' : 'Stop at the orange ring to pick up'; }
+    if (o.state === 'toCustomer') { const a = o.offer.bld.entrance.approach, d = Math.hypot(b.x - a.x, b.z - a.z); if (d < 3.6) pr = '<kbd>E</kbd> enter building · Apt ' + o.offer.apt; }
+  }
+  if (P.onFoot && P.onFoot.prompt) pr = P.onFoot.prompt;
+  if (!pr && P.offer && game.mode === 'street') pr = '';
+  setPrompt(pr);
+  // markers
+  if (W.markers) {
+    const mk = W.markers, t = orderTarget(P);
+    mk.pickup.visible = !!(o && o.state === 'toRestaurant'); mk.drop.visible = !!(o && o.state === 'toCustomer');
+    if (mk.pickup.visible) mk.pickup.position.set(t.x, W.surface.height(t.x, t.z), t.z);
+    if (mk.drop.visible) mk.drop.position.set(t.x, W.surface.height(t.x, t.z), t.z);
+    const pulse = 0.18 + 0.08 * Math.sin(performance.now() / 300); mk.pickup.children[0].material.opacity = mk.drop.children[0].material.opacity = pulse;
+  }
+  // route + minimap at ~8 Hz
+  hud.mapT -= dt; hud.routeT -= dt;
+  if (hud.routeT <= 0) { hud.routeT = 0.3; const t = orderTarget(P); hud.route = t && W.nav && !P.onFoot ? navRoute(P.bike, t) : []; }
+  if (hud.mapT <= 0) { hud.mapT = 0.12; drawMinimap(P); updatePhoneScreen(P); }
+}
+
+// ---- procedural audio (WebAudio, no assets). M mutes. ----
+const AUDIO = { ctx: null, muted: false };
+function audioUnlock() {
+  if (AUDIO.ctx) { if (AUDIO.ctx.state === 'suspended') AUDIO.ctx.resume(); return; }
+  try {
+    const ctx = new (window.AudioContext || window.webkitAudioContext)(); AUDIO.ctx = ctx;
+    AUDIO.master = ctx.createGain(); AUDIO.master.gain.value = 0.45; AUDIO.master.connect(ctx.destination);
+    const len = ctx.sampleRate * 2, buf = ctx.createBuffer(1, len, ctx.sampleRate), d = buf.getChannelData(0); const R = new RNG('noise');
+    for (let i = 0; i < len; i++) d[i] = R.float() * 2 - 1;
+    AUDIO.noise = buf;
+    const loop = (type, freq, q) => { const s = ctx.createBufferSource(); s.buffer = buf; s.loop = true; const f = ctx.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q; const g = ctx.createGain(); g.gain.value = 0; s.connect(f); f.connect(g); g.connect(AUDIO.master); s.start(); return g; };
+    AUDIO.wind = loop('lowpass', 500, 0.7); AUDIO.skid = loop('bandpass', 1900, 2.5);
+  } catch (e) { AUDIO.ctx = null; }
+}
+function tone(type, f0, f1, dur, vol, delay = 0) {
+  const ctx = AUDIO.ctx, t = ctx.currentTime + delay, o = ctx.createOscillator(), g = ctx.createGain();
+  o.type = type; o.frequency.setValueAtTime(f0, t); o.frequency.exponentialRampToValueAtTime(Math.max(f1, 1), t + dur);
+  g.gain.setValueAtTime(0.0001, t); g.gain.exponentialRampToValueAtTime(vol, t + 0.01); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  o.connect(g); g.connect(AUDIO.master); o.start(t); o.stop(t + dur + 0.05);
+}
+function burst(freq, type, dur, vol, delay = 0) {
+  const ctx = AUDIO.ctx, t = ctx.currentTime + delay, s = ctx.createBufferSource(), f = ctx.createBiquadFilter(), g = ctx.createGain();
+  s.buffer = AUDIO.noise; f.type = type; f.frequency.value = freq; g.gain.setValueAtTime(vol, t); g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  s.connect(f); f.connect(g); g.connect(AUDIO.master); s.start(t, AUDIO.ctx.currentTime % 1); s.stop(t + dur + 0.05);
+}
+function sfx(name, amount = 1, src = null) {
+  if (!AUDIO.ctx || AUDIO.muted) return;
+  let vol = 1; if (src && players[0]) { const b = players[0].bike; vol = clamp(1 - Math.hypot(src.x - b.x, src.z - b.z) / 45, 0, 1); if (vol <= 0.02) return; }
+  switch (name) {
+    case 'crash': burst(900, 'lowpass', 0.45, 0.9); tone('sine', 120, 40, 0.35, 0.8); break;
+    case 'scrape': burst(2600, 'bandpass', 0.18, 0.25 * clamp(amount / 3, 0.3, 1)); break;
+    case 'thud': tone('sine', 110, 50, 0.15, 0.4); break;
+    case 'crunch': burst(1300, 'bandpass', 0.25, 0.5); tone('square', 300, 120, 0.12, 0.12, 0.05); break;
+    case 'honk': tone('square', 330, 320, 0.42, 0.16 * vol); tone('square', 415, 405, 0.42, 0.12 * vol); break;
+    case 'bell': tone('sine', 2800, 2780, 0.6, 0.18); tone('sine', 2800, 2780, 0.6, 0.18, 0.18); break;
+    case 'chain': tone('sine', 520 + 40 * Math.min(amount, 10), 900 + 60 * Math.min(amount, 10), 0.12, 0.15); break;
+    case 'ping': tone('sine', 880, 880, 0.12, 0.12); tone('sine', 1320, 1320, 0.16, 0.1, 0.1); break;
+    case 'coin': [784, 988, 1318].forEach((f, i) => tone('triangle', f, f, 0.18, 0.18, i * 0.08)); break;
+    case 'sad': tone('sawtooth', 233, 220, 0.3, 0.12); tone('sawtooth', 220, 207, 0.3, 0.12, 0.32); tone('sawtooth', 207, 160, 0.8, 0.12, 0.64); break;
+    case 'oof': tone('sawtooth', 160, 80, 0.25, 0.18 * vol); break;
+    case 'door': burst(3000, 'highpass', 0.05, 0.3); break;
+    case 'ding': tone('sine', 1046, 1046, 0.5, 0.15); tone('sine', 1318, 1318, 0.7, 0.12, 0.25); break;
+    case 'buzz': tone('square', 110, 108, 0.35, 0.12); break;
+    case 'hiss': burst(3500, 'highpass', 1.6, 0.22 * vol); break;
+    case 'clank': tone('square', 220, 180, 0.2, 0.15 * vol); burst(1800, 'bandpass', 0.2, 0.25 * vol); break;
+    case 'rev': tone('sawtooth', 60, 140, 0.9, 0.14 * vol); break;
+    case 'gibber': for (let i = 0; i < 5; i++) tone('triangle', 180 + W.rng.fx.range(0, 140), 160 + W.rng.fx.range(0, 120), 0.09, 0.12, i * 0.11); break;
+  }
+}
+function updateAudio(P, dt) {
+  if (!AUDIO.ctx) return; const b = P.bike, sp = Math.hypot(b.vx, b.vz), on = !AUDIO.muted && game.mode !== 'title' && !game.paused && !P.onFoot && b.state === 'ride';
+  AUDIO.wind.gain.value = on ? Math.min(0.28, (sp / 9) * (sp / 9) * 0.25) : 0;
+  AUDIO.skid.gain.value = on ? clamp(b.skid * sp / 7, 0, 1) * 0.3 : 0;
+}
+
+// @@SECTION16@@
 
 // ===================================================================================
 // 16. DEBUG AND TUNING (tuning panel part; debug overlay added in step 10)
@@ -2430,6 +2739,10 @@ function startWorld(seed, graph = 'district') {
 const GEO_CACHE_SET = new Set();
 function onAction(a) {
   const P = players[0]; if (!P) return;
+  if (a === 'accept') { if (P.onFoot) return interiorInteract(P); if (P.offer) return acceptOffer(P); const o = P.order; if (o && o.state === 'toCustomer') { const ap = o.offer.bld.entrance.approach; if (Math.hypot(P.bike.x - ap.x, P.bike.z - ap.z) < 3.6 && P.bike.state === 'ride') return enterBuilding(P); } return; }
+  if (a === 'decline') { if (P.offer) declineOffer(P); return; }
+  if (a === 'bell') { sfx('bell'); return; }
+  if (a === 'mute') { AUDIO.muted = !AUDIO.muted; toast(AUDIO.muted ? 'Muted' : 'Sound on'); return; }
   if (a === 'camera') { P.camMode = P.camMode === 'fp' ? 'tp' : 'fp'; camState.tpInit = false; }
   if (a === 'restart' && P.checkpoint && !P.onFoot) { const cp = P.checkpoint; fadeTo(() => { if (P.bike.state === 'crash') endCrash(P); clearChain(P, 'restart'); placeBike(P, cp.x, cp.z, cp.heading); }, 0.12, 0.2); }
   if (a === 'pause') { game.paused = !game.paused; ui('pause').style.display = game.paused ? 'flex' : 'none'; }
@@ -2438,17 +2751,27 @@ addEventListener('keydown', e => {
   if (e.target && e.target.tagName === 'INPUT' && e.target.type === 'text') return;
   if (['F1', 'F2', 'Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Backquote', 'Tab'].includes(e.code)) e.preventDefault();
   KEYS.add(e.code); if (e.repeat) return;
+  audioUnlock();
   for (const P of players) if (P.bike.state === 'crash' && e.code !== 'KeyR') P.crashSkip = true;
   const map = { KeyV: 'camera', KeyR: 'restart', Escape: 'pause', KeyE: 'accept', KeyQ: 'decline', KeyB: 'bell', KeyM: 'mute' };
   if (e.code === 'KeyC' && game.mode !== 'title') { const ids = Object.keys(CARGO_TYPES), P = players[0]; const i = P.cargo ? (ids.indexOf(P.cargo.type) + 1) % (ids.length + 1) : 0; if (i < ids.length) loadCargo(P, ids[i]); else unloadCargo(P); return; }
   if (e.code === 'F2') { const t = ui('tuning'); t.style.display = t.style.display === 'block' ? 'none' : 'block'; return; }
   if (e.code === 'Enter' && game.mode === 'title') { beginShift(); return; }
+  if (game.mode === 'receipt') return;
   if (map[e.code] && game.mode !== 'title') onAction(map[e.code]);
 });
 addEventListener('keyup', e => KEYS.delete(e.code));
 addEventListener('blur', () => KEYS.clear());
 
-function beginShift() { ui('title').style.display = 'none'; game.mode = 'street'; }
+function beginShift() {
+  ui('title').style.display = 'none'; ui('receipt').style.display = 'none'; game.mode = 'street'; game.paused = false;
+  createShift(W); buildMinimapBase(W); audioUnlock();
+  const P = players[0]; P.order = null; P.offer = null; P.declines = 0; unloadCargo(P); clearChain(P, 'start'); Object.assign(P.stats, { orders: 0, tips: 0, pay: 0, bonus: 0, crashes: 0, bestChain: 1, nearMisses: 0 });
+  appNotify('Shift started. Accept offers with E. Be nice to the cake.');
+}
+// temporary drop-off until section 13 (interiors) lands
+function enterBuilding(P) { finishDelivery(P); }
+function interiorInteract() {}
 function tick(dt) {
   W.time += dt;
   for (const P of players) {
@@ -2459,14 +2782,7 @@ function tick(dt) {
     updateScoring(P, dt);
     P.events.length = 0;
   }
-  updateSignals(dt); updateTraffic(dt); updatePeds(dt);
-}
-function updateHUD(P) {
-  ui('spd').textContent = Math.round(Math.hypot(P.bike.vx, P.bike.vz) * 3.6);
-  ui('mult').textContent = '×' + P.chain.mult.toFixed(1); ui('chain').textContent = P.chain.count ? `chain ${P.chain.count} · ${P.chain.points} pts unbanked` : 'chain 0';
-  const c = P.cargo; ui('cargoBox').style.display = c ? 'block' : 'none';
-  if (c) { ui('cargoName').textContent = c.def.name; ui('cargoIco').textContent = c.def.icon; ui('cargoState').textContent = CARGO_STATE_NAMES[c.state]; ui('cargoState').style.color = ['var(--good)', 'var(--warn)', 'var(--bad)'][c.state];
-    const bar = ui('cargoBar'); bar.style.width = c.abuse.toFixed(0) + '%'; bar.style.background = ['var(--good)', 'var(--warn)', 'var(--bad)'][c.state]; ui('cargoBox').style.transform = c.flash > 0 ? `scale(${1 + c.flash * 0.15})` : ''; }
+  updateSignals(dt); updateTraffic(dt); updatePeds(dt); updateShift(dt);
 }
 let acc = 0, last = performance.now();
 const perf = { fps: 60, ms: 16 };
@@ -2475,7 +2791,7 @@ function frame(now) {
   const dtReal = Math.min(0.1, (now - last) / 1000); last = now;
   perf.ms = lerp(perf.ms, dtReal * 1000, 0.05); perf.fps = 1000 / perf.ms;
   const P = players[0];
-  if (game.mode !== 'title' && !game.paused) {
+  if (game.mode === 'street' && !game.paused) {
     readInput(P);
     acc += dtReal * game.timeScale;
     let n = 0; while (acc >= DT && n < 6) { tick(DT); acc -= DT; n++; }
@@ -2488,7 +2804,7 @@ function frame(now) {
   updateCamera(P, alpha, dtReal);
   updateSun(P.bike.x, P.bike.z);
   renderFrame(W.scene);
-  updateHUD(P, dtReal);
+  updateHUD(P, dtReal); updateAudio(P, dtReal);
 }
 function boot() {
   for (const g of GEO_CACHE.values()) GEO_CACHE_SET.add(g);
@@ -2501,7 +2817,7 @@ function boot() {
   ui('startBtn').onclick = beginShift;
   // test hook: advance the fixed-step simulation synchronously (headless tests render slowly)
   const sim = (sec) => { const P = players[0]; for (let i = 0; i < Math.round(sec / DT); i++) { readInput(P); tick(DT); updateFade(DT); } acc = 0; return W.time; };
-  window.__game = { get W() { return W; }, players, TUNING, MODULES, game, KEYS, perf, renderer, sim, onAction, loadCargo, placeBike, camState, camera };
+  window.__game = { get W() { return W; }, players, TUNING, MODULES, game, KEYS, perf, renderer, sim, onAction, loadCargo, placeBike, camState, camera, beginShift, endShift };
   requestAnimationFrame(frame);
 }
 boot();
