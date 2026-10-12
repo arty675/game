@@ -1,0 +1,1948 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Last Mile Greybox</title>
+<style>
+:root{--ink:#f2efe6;--dim:#a9a69c;--panel:rgba(16,18,20,.78);--panel2:rgba(28,31,34,.92);--accent:#f07a1a;--trim:#2f5a4b;--good:#71d18a;--warn:#f2b84b;--bad:#ef5b4b;--cyan:#5fd3e6}
+html,body{margin:0;height:100%;overflow:hidden;background:#0d0e10;color:var(--ink);font:14px/1.35 system-ui,-apple-system,"Segoe UI",Roboto,sans-serif}
+canvas#c{display:block;width:100vw;height:100vh}
+.hud{position:fixed;pointer-events:none;z-index:5}
+.panel{background:var(--panel);border-radius:10px;padding:10px 12px;box-shadow:0 2px 10px rgba(0,0,0,.35)}
+#hudTL{top:16px;left:16px;display:flex;gap:10px;align-items:stretch}
+#speedo{min-width:92px;text-align:center}
+#speedo b{display:block;font-size:38px;line-height:1;font-variant-numeric:tabular-nums}
+#speedo small,#multBox small{color:var(--dim);font-size:11px;letter-spacing:.08em;text-transform:uppercase}
+#multBox{min-width:120px}
+#multBox b{font-size:28px;line-height:1.05;font-variant-numeric:tabular-nums}
+#multBox .chain{color:var(--warn);font-variant-numeric:tabular-nums}
+#cargoBox{min-width:110px;display:none}
+#cargoBox .ico{font-size:26px;line-height:1}
+#cargoBox .bar{height:6px;background:#333;border-radius:3px;margin-top:6px;overflow:hidden}
+#cargoBox .bar i{display:block;height:100%;width:0;background:var(--good)}
+#timer{top:14px;left:50%;transform:translateX(-50%);font-size:22px;font-variant-numeric:tabular-nums;padding:4px 14px}
+#offers{top:48px;right:16px;width:270px;display:flex;flex-direction:column;gap:8px}
+.offer{background:var(--panel2);border-left:4px solid var(--accent);border-radius:10px;padding:10px 12px}
+.offer .pay{font-size:24px;font-weight:700}
+.offer .tip{color:var(--good)}
+.offer .meta{color:var(--dim);font-size:12px}
+.offer .keys{margin-top:6px;font-size:12px}
+.offer .keys kbd,.prompt kbd,.help kbd{background:#e9e5da;color:#111;border-radius:4px;padding:0 5px;font:600 12px/18px ui-monospace,Menlo,monospace}
+.offer .tbar{height:3px;background:#444;margin-top:8px;border-radius:2px;overflow:hidden}
+.offer .tbar i{display:block;height:100%;background:var(--accent)}
+#phone{right:16px;bottom:16px;width:230px;display:flex;flex-direction:column;gap:6px}
+.note{background:#f4f1e8;color:#1b1c1e;border-radius:12px;padding:8px 10px;font-size:13px;box-shadow:0 3px 12px rgba(0,0,0,.4);animation:slideIn .25s ease-out}
+.note b{color:#c4560d}
+@keyframes slideIn{from{transform:translateX(30px);opacity:0}to{transform:none;opacity:1}}
+#minimap{left:16px;bottom:16px;width:200px;height:200px;border-radius:12px;background:rgba(10,12,14,.75)}
+#prompt{left:50%;bottom:22%;transform:translateX(-50%);text-align:center;font-size:16px}
+#popups{left:50%;top:30%;transform:translateX(-50%);text-align:center}
+.pop{font-weight:800;font-size:22px;color:var(--warn);text-shadow:0 2px 6px #000;animation:pop 1.1s ease-out forwards}
+@keyframes pop{0%{transform:scale(.6);opacity:0}15%{transform:scale(1.1);opacity:1}70%{opacity:1}100%{transform:translateY(-30px);opacity:0}}
+#tsbox{right:16px;top:14px;width:132px;height:22px;border:1px solid rgba(255,255,255,.5);background:rgba(0,0,0,.35);border-radius:3px}
+#rec{position:absolute;left:-14px;top:7px;width:8px;height:8px;border-radius:50%;background:#e33}
+#fade{position:fixed;inset:0;background:#000;opacity:0;pointer-events:none;z-index:8;transition:none}
+#bubble{position:fixed;z-index:6;pointer-events:none;display:none;max-width:260px;background:#fff;color:#111;border-radius:14px;padding:8px 12px;font-size:16px;transform:translate(-50%,-100%)}
+#bubble:after{content:"";position:absolute;left:50%;bottom:-9px;border:9px solid transparent;border-top-color:#fff;border-bottom:0;margin-left:-9px}
+#bubble i{display:block;color:#666;font-size:12px;margin-top:3px}
+#tipCard{left:50%;top:22%;transform:translateX(-50%);display:none;text-align:center;min-width:240px}
+#tipCard .amt{font-size:46px;font-weight:800;color:var(--good);font-variant-numeric:tabular-nums}
+#tipCard .sub{color:var(--dim)}
+.overlay{position:fixed;inset:0;z-index:9;display:none;align-items:center;justify-content:center;background:rgba(8,9,10,.72);pointer-events:auto}
+.overlay .card{background:#17191c;border-radius:16px;padding:22px 26px;max-width:560px;width:calc(100% - 32px);box-shadow:0 10px 40px rgba(0,0,0,.6)}
+.overlay h1{margin:0 0 4px;font-size:30px;letter-spacing:.02em}
+.overlay h1 span{color:var(--accent)}
+.help{columns:2;font-size:13px;color:#d7d3c8;margin:12px 0}
+.help div{margin:3px 0;break-inside:avoid}
+button{font:600 14px system-ui,sans-serif;background:#e9e5da;color:#111;border:0;border-radius:8px;padding:8px 14px;cursor:pointer;margin:4px 6px 0 0}
+button.primary{background:var(--accent);color:#111}
+input[type=text]{font:14px ui-monospace,Menlo,monospace;background:#0f1012;color:var(--ink);border:1px solid #444;border-radius:6px;padding:6px 8px;width:170px}
+#receiptImg{max-height:62vh;max-width:100%;border-radius:10px;display:block;margin:10px auto}
+#liftUI{left:50%;top:40%;transform:translate(-50%,-50%);display:none;text-align:center}
+#liftUI .btns{display:flex;gap:6px;justify-content:center;margin-top:8px}
+#liftUI .btns span{width:34px;height:34px;border-radius:50%;border:2px solid #ccc;display:inline-flex;align-items:center;justify-content:center;font-weight:700}
+#liftUI .btns span.dead{opacity:.3}
+#debug{position:fixed;left:228px;bottom:16px;z-index:7;display:none;width:330px;max-height:70vh;overflow:auto;font:12px/1.35 ui-monospace,Menlo,monospace;pointer-events:auto}
+#debug pre{margin:0;white-space:pre-wrap}
+#debug button{font-size:11px;padding:4px 8px}
+#tuning{position:fixed;right:16px;top:16px;z-index:7;display:none;width:300px;max-height:calc(100vh - 32px);overflow:auto;font-size:12px;pointer-events:auto}
+#tuning details{margin:4px 0}
+#tuning summary{cursor:pointer;font-weight:700;color:var(--warn)}
+#tuning label{display:grid;grid-template-columns:118px 1fr 48px;gap:6px;align-items:center;margin:2px 0}
+#tuning label span{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:#d7d3c8}
+#tuning input[type=range]{width:100%}
+#tuning output{font:11px ui-monospace,monospace;text-align:right}
+#labels{position:fixed;inset:0;pointer-events:none;z-index:4;overflow:hidden}
+#labels div{position:absolute;transform:translate(-50%,-100%);font:10px/1.1 ui-monospace,monospace;background:rgba(0,0,0,.6);padding:1px 3px;border-radius:3px;white-space:nowrap;color:#fff}
+#labels div.p{color:var(--cyan)}
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="labels"></div>
+<div class="hud" id="hudTL">
+  <div class="panel" id="speedo"><b id="spd">0</b><small>km/h</small></div>
+  <div class="panel" id="multBox"><small>multiplier</small><br><b id="mult">×1.0</b><div class="chain" id="chain">chain 0</div></div>
+  <div class="panel" id="cargoBox"><small id="cargoName">cargo</small><div class="ico" id="cargoIco"></div><div id="cargoState">intact</div><div class="bar"><i id="cargoBar"></i></div></div>
+</div>
+<div class="hud panel" id="timer">8:00</div>
+<div class="hud" id="offers"></div>
+<div class="hud" id="phone"></div>
+<canvas class="hud" id="minimap" width="400" height="400"></canvas>
+<div class="hud prompt" id="prompt"></div>
+<div class="hud" id="popups"></div>
+<div class="hud" id="tsbox"><div id="rec"></div></div>
+<div class="hud panel" id="tipCard"><div class="sub" id="tipTitle">Tip</div><div class="amt" id="tipAmt">$0.00</div><div class="sub" id="tipSub"></div></div>
+<div class="hud panel" id="liftUI"><div>Lift — press a floor number</div><div class="btns" id="liftBtns"></div><div class="sub" style="color:var(--dim);font-size:12px;margin-top:6px">Esc / walk out to cancel</div></div>
+<div id="bubble"></div>
+<div id="fade"></div>
+<div class="panel" id="debug"></div>
+<div class="panel" id="tuning"></div>
+<div class="overlay" id="title"><div class="card">
+  <h1>Last <span>Mile</span> <small style="font-size:14px;color:var(--dim)">greybox prototype</small></h1>
+  <div style="color:var(--dim)">Comedy e-bike delivery. Deliver, don't die, don't expect a tip.</div>
+  <div class="help">
+    <div><kbd>W</kbd> pedal &nbsp;<kbd>S</kbd> brake</div><div><kbd>Space</kbd> hard brake / skid</div>
+    <div><kbd>A</kbd><kbd>D</kbd> steer</div><div><kbd>Shift</kbd> sprint</div>
+    <div><kbd>E</kbd> accept / interact</div><div><kbd>Q</kbd> decline offer</div>
+    <div><kbd>R</kbd> restart at checkpoint</div><div><kbd>V</kbd> third person</div>
+    <div><kbd>B</kbd> bell &nbsp;<kbd>M</kbd> mute</div><div><kbd>Esc</kbd> pause</div>
+    <div><kbd>F1</kbd>/<kbd>`</kbd> debug</div><div><kbd>F2</kbd> tuning</div>
+    <div>Gamepad: LS steer, RT pedal, LT brake</div><div>A accept, B decline, Y restart</div>
+  </div>
+  <div>Seed <input type="text" id="seedInput"> <button id="dailyBtn">Daily seed</button> <button id="newSeedBtn">New seed</button></div>
+  <div style="margin-top:10px"><button class="primary" id="startBtn">Start shift (Enter)</button></div>
+</div></div>
+<div class="overlay" id="pause"><div class="card"><h1>Paused</h1><div class="help" id="pauseHelp"></div><button class="primary" id="resumeBtn">Resume (Esc)</button> <button id="restartShiftBtn">Restart shift</button> <button id="titleBtn">Change seed</button></div></div>
+<div class="overlay" id="receipt"><div class="card" style="text-align:center"><h1>Shift over</h1><img id="receiptImg" alt="Shift receipt"><button class="primary" id="savePng">Save PNG</button> <button id="againBtn">Same seed again</button> <button id="newShiftBtn">New seed</button></div></div>
+
+<script type="importmap">{"imports":{"three":"https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js"}}</script>
+<script type="module">
+import * as THREE from 'three';
+
+/* =====================================================================================
+   LAST MILE — greybox prototype. One file, no build step.
+   Sections (in order): 1 constants & TUNING · 2 seeded RNG · 3 module catalogue ·
+   4 street graph & generation · 5 world build · 6 bike · 7 camera & post-process ·
+   8 crash · 9 cargo · 10 traffic · 11 pedestrians · 12 situation director ·
+   13 interiors · 14 shift & app · 15 HUD · 16 debug · 17 main loop
+   Coordinate convention (Three.js, Y up): world +X east, +Z south, -Z north, metres.
+   Module local frame = Blender sheet frame exported to glTF: X right, Y up (sheet Z),
+   +Z out of the facade / vehicle front (sheet -Y). Facade modules: origin bottom-left
+   of the exterior face, depth runs to -Z. Props/vehicles: origin centre of footprint.
+   ===================================================================================== */
+
+// ===================================================================================
+// 1. CONSTANTS AND TUNING
+// ===================================================================================
+const DT = 1 / 60;                 // fixed simulation step (60 Hz)
+const DEG = Math.PI / 180;
+const KMH = 1 / 3.6;
+const Y_ROAD = -0.15, Y_WALK = 0, Y_ALLEY = -0.05;   // 04A profile heights
+const CURB_W = 0.30;               // curb 0.15 high x 0.30 wide (04A)
+const BAY = 4, FLOOR_G = 4, FLOOR_U = 3, WALL_T = 0.30, QUOIN = 0.25;  // 01A/01B
+const G_ACC = 9.81;
+
+// Every tuning number lives here: [group, key, default, min, max, step]. The live panel (F2) is generated from it.
+const TUNING_SPEC = [
+  ['Bike drive', 'topSpeedKmh', 32, 15, 50, 0.5], ['Bike drive', 'sprintTopSpeedKmh', 36, 15, 55, 0.5],
+  ['Bike drive', 'pedalAccel', 3.0, 0.5, 8, 0.1], ['Bike drive', 'sprintAccel', 4.0, 0.5, 10, 0.1],
+  ['Bike drive', 'assistFade', 0.15, 0.02, 0.6, 0.01], ['Bike drive', 'rollingDrag', 0.10, 0, 1, 0.01],
+  ['Bike drive', 'aeroDrag', 0.0045, 0, 0.02, 0.0005], ['Bike drive', 'reverseKmh', 4, 0, 10, 0.5],
+  ['Bike brake', 'brakeDecel', 4.5, 1, 10, 0.1], ['Bike brake', 'hardBrakeDecel', 6.0, 1, 12, 0.1],
+  ['Bike brake', 'hardBrakeThreshold', 0.85, 0.5, 1, 0.01],
+  ['Bike steer', 'steerMaxLowDeg', 30, 5, 45, 0.5], ['Bike steer', 'steerMaxHighDeg', 5.5, 1, 20, 0.1],
+  ['Bike steer', 'steerFalloffKmh', 28, 5, 50, 0.5], ['Bike steer', 'steerRate', 4.5, 0.5, 20, 0.1],
+  ['Bike steer', 'steerReturn', 7, 0.5, 30, 0.1], ['Bike steer', 'steerExpo', 0.3, 0, 1, 0.01],
+  ['Bike grip', 'lateralGrip', 12, 1, 40, 0.5], ['Bike grip', 'skidGrip', 1.5, 0.1, 10, 0.1],
+  ['Bike grip', 'skidYawGain', 0.24, 0, 1, 0.01], ['Bike grip', 'skidYawDamp', 2.0, 0, 10, 0.1],
+  ['Bike grip', 'skidSteerAuthority', 0.5, 0, 1, 0.01], ['Bike grip', 'skidOnRate', 9, 1, 30, 0.5],
+  ['Bike grip', 'gripRecover', 2.6, 0.2, 10, 0.1], ['Bike grip', 'minSkidKmh', 7, 0, 20, 0.5],
+  ['Bike lean', 'leanMaxDeg', 36, 0, 60, 1], ['Bike lean', 'leanResponse', 8, 1, 30, 0.5],
+  ['Bike lean', 'cameraLeanFactor', 0.25, 0, 1, 0.01],
+  ['Collisions', 'bikeRadius', 0.30, 0.15, 0.5, 0.01], ['Collisions', 'crashMinKmh', 13, 3, 40, 0.5],
+  ['Collisions', 'crashAngleDeg', 35, 5, 90, 1], ['Collisions', 'wallBounce', 0.12, 0, 1, 0.01],
+  ['Collisions', 'scrapeFriction', 0.35, 0, 1, 0.01], ['Collisions', 'scrapeAlign', 3.0, 0, 10, 0.1],
+  ['Curbs', 'curbMountNormalKmh', 9, 1, 30, 0.5], ['Curbs', 'curbCrashNormalKmh', 16, 5, 40, 0.5],
+  ['Curbs', 'curbShallowDeg', 16, 0, 45, 1], ['Curbs', 'curbSpeedLoss', 0.15, 0, 0.8, 0.01],
+  ['Curbs', 'curbBump', 0.06, 0, 0.3, 0.005],
+  ['Crash', 'crashMinTime', 1.2, 0, 3, 0.05], ['Crash', 'crashAutoRespawn', 2.5, 0.5, 6, 0.1],
+  ['Crash', 'ragdollBounce', 0.25, 0, 1, 0.01], ['Crash', 'ragdollFriction', 5, 0, 20, 0.5],
+  ['Crash', 'ragdollPop', 2.4, 0, 8, 0.1],
+  ['Camera', 'fov', 85, 75, 100, 1], ['Camera', 'camHeight', 1.30, 0.8, 1.8, 0.01],
+  ['Camera', 'camPitchDeg', -10, -30, 10, 0.5], ['Camera', 'camForward', -0.30, -0.6, 0.4, 0.01],
+  ['Camera', 'camLeanShift', 0.5, 0, 1, 0.01], ['Camera', 'bumpCamGain', 1.0, 0, 3, 0.05],
+  ['Camera', 'tpDistance', 4.2, 2, 10, 0.1], ['Camera', 'tpHeight', 1.9, 0.5, 5, 0.1],
+  ['Post', 'barrel', 0.07, 0, 0.3, 0.005], ['Post', 'fringe', 0.0035, 0, 0.02, 0.0005],
+  ['Post', 'vignette', 0.35, 0, 1, 0.01], ['Post', 'noise', 0.035, 0, 0.2, 0.005],
+  ['Cargo', 'cargoSpring', 70, 5, 300, 1], ['Cargo', 'cargoDamping', 6, 0.5, 40, 0.5],
+  ['Cargo', 'cargoGain', 1.0, 0, 4, 0.05], ['Cargo', 'abuseScale', 1.0, 0, 4, 0.05],
+  ['Scoring', 'nearMissDist', 0.6, 0.1, 2, 0.05], ['Scoring', 'nearMissMinKmh', 15, 0, 40, 0.5],
+  ['Scoring', 'cleanLineSeconds', 6, 1, 20, 0.5], ['Scoring', 'cleanLineMinKmh', 20, 5, 40, 0.5],
+  ['Scoring', 'multStep', 0.1, 0.01, 1, 0.01], ['Scoring', 'multMax', 4, 1, 10, 0.1],
+  ['Shift', 'shiftMinutes', 8, 2, 15, 0.5], ['Shift', 'offerEvery', 5, 1, 30, 0.5],
+  ['Shift', 'offerTimeout', 14, 4, 60, 1], ['Shift', 'walkSpeed', 2.8, 1, 6, 0.1],
+  ['Traffic', 'trafficCars', 26, 0, 40, 1], ['Traffic', 'carSpeedKmh', 36, 10, 60, 1],
+  ['Traffic', 'pedestrians', 36, 0, 60, 1], ['Traffic', 'jaywalkChance', 0.04, 0, 0.5, 0.01],
+  ['Situations', 'situationEvery', 14, 3, 60, 1],
+  ['Graphics', 'shadows', 1, 0, 1, 1], ['Graphics', 'post', 1, 0, 1, 1],
+  ['Graphics', 'pixelRatioMax', 1.5, 0.5, 2, 0.25], ['Graphics', 'drawDistance', 280, 80, 600, 10],
+];
+const TUNING = {};
+for (const [, k, v] of TUNING_SPEC) TUNING[k] = v;
+const TUNING_DEFAULTS = { ...TUNING };
+try { Object.assign(TUNING, JSON.parse(localStorage.getItem('lastmile.tuning') || '{}')); } catch (e) { /* storage blocked: defaults */ }
+
+const clamp = (v, a, b) => (v < a ? a : v > b ? b : v);
+const lerp = (a, b, t) => a + (b - a) * t;
+const smooth = (a, b, x) => { const t = clamp((x - a) / (b - a), 0, 1); return t * t * (3 - 2 * t); };
+const approach = (v, t, d) => (v < t ? Math.min(v + d, t) : Math.max(v - d, t));
+const wrapAngle = a => { while (a > Math.PI) a -= 2 * Math.PI; while (a < -Math.PI) a += 2 * Math.PI; return a; };
+const damp = (v, t, k, dt) => lerp(v, t, 1 - Math.exp(-k * dt));
+const money = v => '$' + v.toFixed(2);
+
+// ===================================================================================
+// 2. SEEDED RNG — every gameplay random call goes through a named stream
+// ===================================================================================
+function hashStr(str) {
+  let h = 1779033703 ^ str.length;
+  for (let i = 0; i < str.length; i++) { h = Math.imul(h ^ str.charCodeAt(i), 3432918353); h = (h << 13) | (h >>> 19); }
+  h = Math.imul(h ^ (h >>> 16), 2246822507); h = Math.imul(h ^ (h >>> 13), 3266489909);
+  return (h ^= h >>> 16) >>> 0;
+}
+class RNG {
+  constructor(seed) { this.s = hashStr(String(seed)) | 0 || 1; }
+  float() { // mulberry32
+    let t = (this.s = (this.s + 0x6D2B79F5) | 0);
+    t = Math.imul(t ^ (t >>> 15), 1 | t);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  }
+  range(a, b) { return a + (b - a) * this.float(); }
+  int(a, b) { return a + Math.floor(this.float() * (b - a + 1)); }
+  pick(arr) { return arr[Math.floor(this.float() * arr.length)]; }
+  chance(p) { return this.float() < p; }
+  weighted(items, wfn) {
+    let tot = 0; for (const it of items) tot += wfn(it);
+    let r = this.float() * tot;
+    for (const it of items) { r -= wfn(it); if (r <= 0) return it; }
+    return items[items.length - 1];
+  }
+  shuffle(a) { for (let i = a.length - 1; i > 0; i--) { const j = Math.floor(this.float() * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
+}
+// Independent streams so player behaviour in one system never shifts another system's picks.
+function makeStreams(seed) {
+  const s = {};
+  for (const n of ['world', 'traffic', 'peds', 'orders', 'director', 'fx']) s[n] = new RNG(seed + '|' + n);
+  return s;
+}
+
+// ===================================================================================
+// 3. MODULE CATALOGUE — every placed asset comes from MODULES. Replace build() bodies
+//    with loaded meshes later; placement, batching, colliders and audit stay the same.
+// ===================================================================================
+const PALETTE = {
+  // the six matte swatches from sheet 01B
+  M_Brick: 0x8c4a3b, M_Stone: 0xc2b097, M_Trim: 0x2e5a4a, M_Glass: 0x52677a, M_Metal: 0x3a3e44, M_Roof: 0x67686b,
+  // greybox extras (no sheet swatch given — proposed)
+  Asphalt: 0x3b3d40, Sidewalk: 0xa49e93, Curb: 0xbab3a7, Concrete: 0x9a968d, AlleyConc: 0x8c887f, PaintWhite: 0xe7e4db,
+  PaintYellow: 0xd8a936, BikeGreen: 0x3b8857, Tactile: 0xc9a236, Wood: 0x8b5d39, WoodDark: 0x5c3e27, Foliage: 0x5a7a3a,
+  FoliageDark: 0x48683a, Trunk: 0x5b4733, Lawn: 0x67854a, Soil: 0x4d3f31, Black: 0x1e1f22, Rubber: 0x252629, Chrome: 0x9ca1a7,
+  LampGlow: 0xf2d68c, SigRed: 0x8a2b25, SigAmber: 0x8a6420, SigGreen: 0x2f6b40, StopRed: 0xa8342c, SignGreen: 0x2f6b4a,
+  Orange: 0xf07a1a, OrangeDark: 0xb85a12, HiVis: 0xd9c53b, Cone: 0xd2632c, Hydrant: 0x8f3a2e, NewsBlue: 0x3c5f8f,
+  Canvas: 0xd9cfb6, GreenPly: 0x3f5a3c, Steel: 0x6f747a, Dumpster: 0x2f5b3e, Fence: 0x2a2c2e, PlanterC: 0x8f8a80,
+  VehBlack: 0x222428, TaxiTeal: 0x2c8a88, TaxiCream: 0xebe1c4, Silver: 0xb8bbbf, VanWhite: 0xe3e3de, MinivanBlue: 0x3d5c87,
+  TruckWhite: 0xdbdbd5, HeadLamp: 0xf4ecd0, TailLamp: 0xb3302a, BikeFrame: 0x2a4f57, Battery: 0x2b2d30,
+  Paper: 0xc6a274, PaperDark: 0x9a7a52, Cup: 0xe8e2d6, CupLid: 0xb8322e, PizzaBox: 0xc9a273, Cake: 0xf1e9d6,
+  CakeRibbon: 0xb5343a, Water: 0x9cc4d6, Fish: 0xf0892a, Sauce: 0xa8402c, Interior: 0xd9c9a6, InteriorLow: 0x6f8f6c,
+  Door: 0x7a4a2a, Floor: 0x8d8478, Skirting: 0x5e5a54, Plate: 0xd8c27a, Mailbox: 0x55595e, Radiator: 0xe7e1d2,
+  Skin1: 0xe0b48f, Skin2: 0xb98563, Skin3: 0x8a5a3c, Skin4: 0xf0cfb2, Hair1: 0x2b211b, Hair2: 0x6b4a2f, Hair3: 0xb5b0a8,
+  Hoodie: 0x46613f, Shorts: 0x3b3a36, Helmet: 0xd7d7d2, Glove: 0x1f2022, Shoe: 0xe6e6e0, Sock: 0xdedbd2,
+  Scrubs: 0x3f6fb3, Robe: 0xe8e6e0, RobeTrim: 0x3d5f9a, Tank: 0x2c2e30, Khaki: 0x6c6a48, Cardigan: 0x8a3f6a,
+  Floral: 0xc9a9b9, HoodieBlue: 0x3d5f99, Plaid: 0x3a4f7a, Suit: 0x232a3d, Shirt: 0xe9e9e4, Tie: 0x7a2b3a,
+  Boxers: 0x9bb5d6, Dog: 0xc58a4a, Walker: 0xb5b7ba, Briefcase: 0x2b2420, Curler: 0xd59ad0, Steam: 0xe8ecef,
+};
+const MATS = {};
+function M(name) {
+  if (!MATS[name]) {
+    const opt = { color: PALETTE[name] ?? 0xff00ff, flatShading: true };
+    if (name === 'Water') { opt.transparent = true; opt.opacity = 0.55; }
+    if (name === 'Steam') { opt.transparent = true; opt.opacity = 0.5; opt.depthWrite = false; }
+    MATS[name] = new THREE.MeshLambertMaterial(opt);
+    MATS[name].name = name;
+  }
+  return MATS[name];
+}
+const GLOW = {}; // unlit materials for lamps (signals, lit windows)
+function glowMat(hex) { return GLOW[hex] || (GLOW[hex] = new THREE.MeshBasicMaterial({ color: hex })); }
+
+// ---- primitive helpers (all sizes in metres, module-local) ----
+const UNIT_BOX = new THREE.BoxGeometry(1, 1, 1);
+const GEO_CACHE = new Map();
+function cylGeo(seg = 10, top = 1) { const k = 'c' + seg + ':' + top; if (!GEO_CACHE.has(k)) GEO_CACHE.set(k, new THREE.CylinderGeometry(top, 1, 1, seg)); return GEO_CACHE.get(k); }
+function icoGeo() { if (!GEO_CACHE.has('ico')) GEO_CACHE.set('ico', new THREE.IcosahedronGeometry(1, 0)); return GEO_CACHE.get('ico'); }
+const G = () => new THREE.Group();
+// axis-aligned box spanning [x0,x1] x [y0,y1] x [z0,z1]
+function B(g, mat, x0, y0, z0, x1, y1, z1) {
+  const m = new THREE.Mesh(UNIT_BOX, typeof mat === 'string' ? M(mat) : mat);
+  m.position.set((x0 + x1) / 2, (y0 + y1) / 2, (z0 + z1) / 2);
+  m.scale.set(Math.abs(x1 - x0) || 1e-3, Math.abs(y1 - y0) || 1e-3, Math.abs(z1 - z0) || 1e-3);
+  g.add(m); return m;
+}
+// centred box with rotation (radians, Euler XYZ)
+function BC(g, mat, cx, cy, cz, sx, sy, sz, rx = 0, ry = 0, rz = 0) {
+  const m = new THREE.Mesh(UNIT_BOX, typeof mat === 'string' ? M(mat) : mat);
+  m.position.set(cx, cy, cz); m.scale.set(sx, sy, sz); m.rotation.set(rx, ry, rz);
+  g.add(m); return m;
+}
+// vertical cylinder: centre (cx,cz), from y0, radius r, height h
+function C(g, mat, cx, y0, cz, r, h, seg = 10, top = 1) {
+  const m = new THREE.Mesh(cylGeo(seg, top), typeof mat === 'string' ? M(mat) : mat);
+  m.position.set(cx, y0 + h / 2, cz); m.scale.set(r, h, r);
+  g.add(m); return m;
+}
+// cylinder lying along X (axis='x') or Z (axis='z'), centred at (cx,cy,cz)
+function CA(g, mat, axis, cx, cy, cz, r, len, seg = 10) {
+  const m = new THREE.Mesh(cylGeo(seg, 1), typeof mat === 'string' ? M(mat) : mat);
+  m.position.set(cx, cy, cz); m.scale.set(r, len, r);
+  if (axis === 'x') m.rotation.z = Math.PI / 2; else m.rotation.x = Math.PI / 2;
+  g.add(m); return m;
+}
+// tube from point a to point b (thin cylinder)
+const _ta = new THREE.Vector3(), _tb = new THREE.Vector3(), _tq = new THREE.Quaternion(), _up = new THREE.Vector3(0, 1, 0);
+function T(g, mat, a, b, r, seg = 6) {
+  _ta.set(a[0], a[1], a[2]); _tb.set(b[0], b[1], b[2]);
+  const len = _ta.distanceTo(_tb);
+  const m = new THREE.Mesh(cylGeo(seg, 1), typeof mat === 'string' ? M(mat) : mat);
+  m.position.copy(_ta).add(_tb).multiplyScalar(0.5); m.scale.set(r, len, r);
+  _tb.sub(_ta).normalize(); _tq.setFromUnitVectors(_up, _tb); m.quaternion.copy(_tq);
+  g.add(m); return m;
+}
+function blob(g, mat, cx, cy, cz, rx, ry, rz) { const m = new THREE.Mesh(icoGeo(), M(mat)); m.position.set(cx, cy, cz); m.scale.set(rx, ry, rz); g.add(m); return m; }
+
+// wall slab x∈[0,w], y∈[y0,h], z∈[-d,0] with rectangular holes [x0,y0,x1,y1]
+function wallWithHoles(g, mat, w, h, d, holes, y0 = 0) {
+  const xs = [0, w]; for (const o of holes) xs.push(o[0], o[2]);
+  const ux = [...new Set(xs.map(v => +v.toFixed(4)))].sort((a, b) => a - b);
+  for (let i = 0; i < ux.length - 1; i++) {
+    const xa = ux[i], xb = ux[i + 1], mid = (xa + xb) / 2;
+    const cover = holes.filter(o => o[0] < mid && o[2] > mid).map(o => [o[1], o[3]]).sort((a, b) => a[0] - b[0]);
+    let y = y0;
+    for (const [ha, hb] of cover) { if (ha > y + 1e-4) B(g, mat, xa, y, -d, xb, ha, 0); y = Math.max(y, hb); }
+    if (h > y + 1e-4) B(g, mat, xa, y, -d, xb, h, 0);
+  }
+}
+// recessed glazing + green trim frame inside an opening
+function glazing(g, x0, y0, x1, y1, o = {}) {
+  const t = 0.06, zb = -0.17, zf = o.flushFrame ? -0.02 : -0.09;
+  B(g, 'M_Glass', x0, y0, zb, x1, y1, zb + 0.03);
+  B(g, 'M_Trim', x0, y0, zb, x0 + t, y1, zf); B(g, 'M_Trim', x1 - t, y0, zb, x1, y1, zf);
+  B(g, 'M_Trim', x0 + t, y0, zb, x1 - t, y0 + t, zf); B(g, 'M_Trim', x0 + t, y1 - t, zb, x1 - t, y1, zf);
+  for (const mx of o.mullions || []) B(g, 'M_Trim', mx - 0.03, y0, zb, mx + 0.03, y1, zf + 0.02);
+  for (const my of o.transoms || []) B(g, 'M_Trim', x0, my - 0.03, zb, x1, my + 0.03, zf + 0.02);
+}
+function quoins(g, w, h) { B(g, 'M_Stone', 0, 0, -WALL_T, QUOIN, h, 0.03); B(g, 'M_Stone', w - QUOIN, 0, -WALL_T, w, h, 0.03); }
+function groundBands(g, w) { B(g, 'M_Stone', QUOIN, 0, -WALL_T, w - QUOIN, 0.45, 0.05); B(g, 'M_Stone', QUOIN, FLOOR_G - 0.25, -WALL_T, w - QUOIN, FLOOR_G, 0.06); }
+function upperWindow(g, x0, x1, ac) {
+  glazing(g, x0, 0.8, x1, 2.6, { mullions: [(x0 + x1) / 2], transoms: [1.9] });
+  B(g, 'M_Stone', x0 - 0.1, 0.72, -WALL_T, x1 + 0.1, 0.8, 0.07);
+  B(g, 'M_Stone', x0 - 0.15, 2.6, -WALL_T, x1 + 0.15, 2.82, 0.05);
+  if (ac) { B(g, 'Steel', (x0 + x1) / 2 - 0.38, 0.82, -0.12, (x0 + x1) / 2 + 0.38, 1.24, 0.40); B(g, 'M_Metal', (x0 + x1) / 2 - 0.3, 0.86, 0.40, (x0 + x1) / 2 + 0.3, 1.2, 0.41); }
+}
+function signBand(g, x0, x1) { B(g, 'M_Trim', x0, 3.25, 0, x1, 3.68, 0.06); } // blank (no text on signage)
+
+const MODULES = {};
+// spec: 'sheet' = dims read off an attached sheet (white), 'brief' = dims from the written brief for a sheet
+// that was not attached, 'proposed' = no number given anywhere, chosen here (cyan in audit labels)
+function def(id, o) { o.id = id; o.origin = o.origin || 'CF'; o.spec = o.spec || 'proposed'; MODULES[id] = o; return o; }
+
+// ---------- 01A ground-floor facade modules (4 m W x 4 m H, wall 0.30, half-quoin 0.25) ----------
+const GROUND = { sheet: '01A', h: 4, d: WALL_T, origin: 'BLE', mat: 'M_Brick', spec: 'brief', proj: 0.45 };
+def('BK_G_Storefront', { ...GROUND, w: 4, build() {
+  const g = G(); wallWithHoles(g, 'M_Brick', 4, 4, WALL_T, [[0.45, 0.1, 3.55, 3.2]]); quoins(g, 4, 4); groundBands(g, 4);
+  B(g, 'M_Trim', 0.45, 0.1, -0.2, 3.55, 0.6, -0.1); glazing(g, 0.45, 0.6, 3.55, 3.2, { mullions: [1.48, 2.52], transoms: [2.7] }); signBand(g, 0.4, 3.6); return g; } });
+def('BK_G_StorefrontDoor', { ...GROUND, w: 4, build() {
+  const g = G(); wallWithHoles(g, 'M_Brick', 4, 4, WALL_T, [[0.45, 0.1, 3.55, 3.2]]); quoins(g, 4, 4); groundBands(g, 4);
+  B(g, 'M_Trim', 0.45, 0.1, -0.2, 2.35, 0.6, -0.1); glazing(g, 0.45, 0.6, 2.35, 3.2, { mullions: [1.4], transoms: [2.7] });
+  B(g, 'M_Trim', 2.35, 0.1, -0.2, 2.45, 3.2, -0.08); glazing(g, 2.45, 0.1, 3.55, 3.2, { transoms: [2.55] }); B(g, 'M_Trim', 2.5, 0.1, -0.16, 3.5, 0.9, -0.12);
+  signBand(g, 0.4, 3.6); return g; },
+  sockets: { SOCKET_Entrance: { pos: [3.0, 0, 0], approach: [3.0, 0, 2.0] } } });
+def('BK_G_Restaurant', { ...GROUND, w: 4, proj: 1.25, build() {
+  const g = G(); wallWithHoles(g, 'M_Brick', 4, 4, WALL_T, [[0.45, 0.1, 3.55, 3.2]]); quoins(g, 4, 4); groundBands(g, 4);
+  B(g, 'M_Trim', 0.45, 0.1, -0.2, 2.35, 0.6, -0.1); glazing(g, 0.45, 0.6, 2.35, 3.2, { mullions: [1.4] });
+  glazing(g, 2.45, 0.1, 3.55, 3.2, { transoms: [2.55] }); B(g, 'M_Trim', 2.35, 0.1, -0.2, 2.45, 3.2, -0.08);
+  BC(g, 'M_Trim', 2.0, 3.02, 0.55, 3.4, 0.06, 1.25, 0.5, 0, 0); B(g, 'M_Trim', 0.3, 2.56, 1.08, 3.7, 2.8, 1.14);
+  return g; },
+  sockets: { SOCKET_Pickup: { pos: [3.0, 0, 0], approach: [3.0, 0, 2.0] } } });
+def('BK_G_DoorResidential', { ...GROUND, w: 4, build() {
+  const g = G(); wallWithHoles(g, 'M_Brick', 4, 4, WALL_T, [[1.35, 0.15, 2.65, 3.05]]); quoins(g, 4, 4); groundBands(g, 4);
+  B(g, 'M_Stone', 1.15, 0.15, -0.05, 1.35, 3.25, 0.06); B(g, 'M_Stone', 2.65, 0.15, -0.05, 2.85, 3.25, 0.06); B(g, 'M_Stone', 1.05, 3.05, -0.05, 2.95, 3.38, 0.1);
+  B(g, 'M_Trim', 1.38, 0.15, -0.24, 2.62, 2.55, -0.2); B(g, 'M_Glass', 1.65, 1.35, -0.2, 2.35, 2.25, -0.19);
+  glazing(g, 1.35, 2.6, 2.65, 3.05); B(g, 'M_Stone', 1.1, 0, -0.05, 2.9, 0.15, 0.4); return g; },
+  sockets: { SOCKET_Entrance: { pos: [2.0, 0.15, 0], approach: [2.0, 0, 2.0] } } });
+def('BK_G_DeliveryDoor', { ...GROUND, w: 4, build() {
+  const g = G(); wallWithHoles(g, 'M_Brick', 4, 4, WALL_T, [[0.5, 0, 1.7, 2.3], [2.4, 2.2, 3.4, 2.9]]); quoins(g, 4, 4); groundBands(g, 4);
+  B(g, 'M_Metal', 0.52, 0, -0.2, 1.68, 2.28, -0.16); B(g, 'Steel', 1.45, 1.0, -0.16, 1.6, 1.1, -0.12);
+  glazing(g, 2.4, 2.2, 3.4, 2.9); for (let i = 0; i < 4; i++) B(g, 'M_Metal', 2.5 + i * 0.27, 2.2, -0.05, 2.53 + i * 0.27, 2.9, -0.02); return g; },
+  sockets: { SOCKET_Service: { pos: [1.1, 0, 0], approach: [1.1, 0, 2.0] } } });
+def('BK_G_Shutter', { ...GROUND, w: 4, build() {
+  const g = G(); wallWithHoles(g, 'M_Brick', 4, 4, WALL_T, [[0.4, 0, 3.6, 3.0]]); quoins(g, 4, 4); groundBands(g, 4);
+  B(g, 'M_Metal', 0.4, 0, -0.12, 3.6, 3.0, -0.08); for (let y = 0.25; y < 3; y += 0.25) B(g, 'Steel', 0.42, y - 0.02, -0.08, 3.58, y, -0.06);
+  B(g, 'M_Metal', 0.3, 3.0, -0.1, 3.7, 3.35, 0.18); return g; } });
+def('BK_G_Plain', { ...GROUND, w: 4, build() {
+  const g = G(); wallWithHoles(g, 'M_Brick', 4, 4, WALL_T, []); quoins(g, 4, 4); groundBands(g, 4);
+  B(g, 'M_Stone', 0.9, 1.2, -0.02, 3.1, 1.28, 0.02); return g; } });
+def('BK_G_Filler2', { ...GROUND, w: 2, build() { const g = G(); wallWithHoles(g, 'M_Brick', 2, 4, WALL_T, []); quoins(g, 2, 4); groundBands(g, 2); return g; } });
+def('BK_G_Filler1', { ...GROUND, w: 1, build() { const g = G(); wallWithHoles(g, 'M_Brick', 1, 4, WALL_T, []); quoins(g, 1, 4); groundBands(g, 1); return g; } });
+
+// ---------- 01B upper-floor modules (4 m W x 3 m H) + rear/party walls ----------
+const UPPER = { sheet: '01B', h: 3, d: WALL_T, origin: 'BLE', mat: 'M_Brick', spec: 'brief', proj: 0.45 };
+def('BK_U_Window', { ...UPPER, w: 4, build() { const g = G(); wallWithHoles(g, 'M_Brick', 4, 3, WALL_T, [[1.4, 0.8, 2.6, 2.6]]); quoins(g, 4, 3); upperWindow(g, 1.4, 2.6); return g; } });
+def('BK_U_WindowPair', { ...UPPER, w: 4, build() { const g = G(); wallWithHoles(g, 'M_Brick', 4, 3, WALL_T, [[0.7, 0.8, 1.7, 2.6], [2.3, 0.8, 3.3, 2.6]]); quoins(g, 4, 3); upperWindow(g, 0.7, 1.7); upperWindow(g, 2.3, 3.3); return g; } });
+def('BK_U_WindowAC', { ...UPPER, w: 4, build() { const g = G(); wallWithHoles(g, 'M_Brick', 4, 3, WALL_T, [[1.4, 0.8, 2.6, 2.6]]); quoins(g, 4, 3); upperWindow(g, 1.4, 2.6, true); return g; } });
+def('BK_U_Plain', { ...UPPER, w: 4, build() { const g = G(); wallWithHoles(g, 'M_Brick', 4, 3, WALL_T, []); quoins(g, 4, 3); return g; } });
+def('BK_U_Filler2', { ...UPPER, w: 2, build() { const g = G(); wallWithHoles(g, 'M_Brick', 2, 3, WALL_T, []); quoins(g, 2, 3); return g; } });
+def('BK_U_Filler1', { ...UPPER, w: 1, build() { const g = G(); wallWithHoles(g, 'M_Brick', 1, 3, WALL_T, []); quoins(g, 1, 3); return g; } });
+// NAMES UNVERIFIED: the brief only says "rear-wall modules BK_P_*, BK_R_*". These ids are proposed.
+def('BK_R_Window', { ...UPPER, w: 4, spec: 'proposed', proj: 0.08, build() { const g = G(); wallWithHoles(g, 'M_Brick', 4, 3, WALL_T, [[1.5, 0.9, 2.5, 2.3]]); glazing(g, 1.5, 0.9, 2.5, 2.3, { flushFrame: true }); B(g, 'Concrete', 1.45, 0.84, -WALL_T, 2.55, 0.9, 0.05); return g; } });
+def('BK_R_Plain', { ...UPPER, w: 4, spec: 'proposed', proj: 0, build() { const g = G(); wallWithHoles(g, 'M_Brick', 4, 3, WALL_T, []); return g; } });
+def('BK_R_Door', { ...UPPER, h: 4, w: 4, spec: 'proposed', proj: 0.2, build() { const g = G(); wallWithHoles(g, 'M_Brick', 4, 4, WALL_T, [[1.4, 0, 2.5, 2.2]]); B(g, 'M_Metal', 1.42, 0, -0.2, 2.48, 2.18, -0.16); B(g, 'M_Metal', 1.2, 2.3, -0.05, 2.7, 2.38, 0.2); return g; } });
+def('BK_P_Wall4', { ...UPPER, w: 4, spec: 'proposed', proj: 0, build() { const g = G(); wallWithHoles(g, 'M_Brick', 4, 3, WALL_T, []); return g; } });
+
+// ---------- 01B roof edges: cornice 0.60, parapet 1.40, post 1.50 ----------
+function cornice(g, w) {
+  B(g, 'M_Trim', 0, 0, -WALL_T, w, 0.18, 0.12); B(g, 'M_Trim', 0, 0.18, -WALL_T, w, 0.42, 0.22); B(g, 'M_Trim', 0, 0.42, -WALL_T, w, 0.6, 0.4);
+  for (let x = w / (Math.round(w / 1.33) || 1) / 2; x < w; x += w / (Math.round(w / 1.33) || 1)) B(g, 'M_Trim', x - 0.05, 0.18, 0.22, x + 0.05, 0.42, 0.36);
+}
+function parapet(g, w) { B(g, 'M_Brick', 0, 0, -WALL_T, w, 1.32, 0); B(g, 'M_Stone', 0, 1.32, -0.34, w, 1.4, 0.04); }
+const ROOFEDGE = { sheet: '01B', origin: 'BLE', spec: 'brief' };
+def('BK_T_Cornice4', { ...ROOFEDGE, w: 4, h: 0.6, d: WALL_T, proj: 0.4, mat: 'M_Trim', build() { const g = G(); cornice(g, 4); return g; } });
+def('BK_T_Cornice2', { ...ROOFEDGE, w: 2, h: 0.6, d: WALL_T, proj: 0.4, mat: 'M_Trim', build() { const g = G(); cornice(g, 2); return g; } });
+def('BK_T_Cornice1', { ...ROOFEDGE, w: 1, h: 0.6, d: WALL_T, proj: 0.4, mat: 'M_Trim', build() { const g = G(); cornice(g, 1); return g; } });
+// corner block: origin at the exterior corner point, walls run to -X and -Z, projection to +X/+Z
+def('BK_T_CorniceCorner', { ...ROOFEDGE, origin: 'CORNER', w: 0.7, h: 0.6, d: 0.7, mat: 'M_Trim', build() {
+  const g = G(); B(g, 'M_Trim', -0.3, 0, -0.3, 0.12, 0.18, 0.12); B(g, 'M_Trim', -0.3, 0.18, -0.3, 0.22, 0.42, 0.22); B(g, 'M_Trim', -0.3, 0.42, -0.3, 0.4, 0.6, 0.4); return g; } });
+def('BK_T_Parapet4', { ...ROOFEDGE, w: 4, h: 1.4, d: WALL_T, proj: 0.04, mat: 'M_Brick', build() { const g = G(); parapet(g, 4); return g; } });
+def('BK_T_Parapet2', { ...ROOFEDGE, w: 2, h: 1.4, d: WALL_T, proj: 0.04, mat: 'M_Brick', build() { const g = G(); parapet(g, 2); return g; } });
+def('BK_T_Parapet1', { ...ROOFEDGE, w: 1, h: 1.4, d: WALL_T, proj: 0.04, mat: 'M_Brick', build() { const g = G(); parapet(g, 1); return g; } });
+def('BK_T_ParapetPost', { ...ROOFEDGE, origin: 'CF', w: 0.52, h: 1.5, d: 0.52, mat: 'M_Brick', build() { const g = G(); B(g, 'M_Brick', -0.225, 0, -0.225, 0.225, 1.42, 0.225); B(g, 'M_Stone', -0.26, 1.42, -0.26, 0.26, 1.5, 0.26); return g; } });
+
+// ---------- 01C corners ----------
+def('BK_C_Column', { sheet: '01C', spec: 'brief', w: 0.6, d: 0.6, h: 'param', mat: 'M_Stone', params: { h: 13 }, build(p) { const g = G(); B(g, 'M_Stone', -0.3, 0, -0.3, 0.3, p.h, 0.3); B(g, 'M_Stone', -0.32, FLOOR_G - 0.25, -0.32, 0.32, FLOOR_G, 0.32); return g; } });
+def('BK_C_ColumnOct', { sheet: '01C', spec: 'brief', w: 0.8, d: 0.8, h: 'param', mat: 'M_Stone', params: { h: 13 }, build(p) { const g = G(); const m = C(g, 'M_Stone', 0, 0, 0, 0.4 / Math.cos(Math.PI / 8), p.h, 8); m.rotation.y = Math.PI / 8; return g; } });
+def('BK_C_Seam', { sheet: '01C', spec: 'brief', origin: 'BLE', w: 0.15, d: WALL_T, proj: 0.06, h: 'param', mat: 'M_Stone', params: { h: 13 }, build(p) { const g = G(); B(g, 'M_Stone', 0, 0, -WALL_T, 0.15, p.h, 0.06); return g; } });
+
+// ---------- 02A fire escapes (3 m rise within 4 m, platform depth 1.00) and signals ----------
+function feRail(g, x0, x1) {
+  B(g, 'M_Metal', x0, -0.06, 0, x1, 0, 1.0);
+  for (let x = x0; x <= x1 + 1e-3; x += (x1 - x0) / Math.round((x1 - x0) / 1)) B(g, 'M_Metal', x - 0.02, 0, 0.96, x + 0.02, 1.0, 1.0);
+  B(g, 'M_Metal', x0, 0.96, 0.96, x1, 1.0, 1.0); B(g, 'M_Metal', x0, 0.5, 0.97, x1, 0.53, 1.0);
+  B(g, 'M_Metal', x0, 0.96, 0, x0 + 0.03, 1.0, 1.0); B(g, 'M_Metal', x1 - 0.03, 0.96, 0, x1, 1.0, 1.0);
+  T(g, 'M_Metal', [x0 + 0.2, -0.05, 0.95], [x0 + 0.2, -0.65, 0.02], 0.02); T(g, 'M_Metal', [x1 - 0.2, -0.05, 0.95], [x1 - 0.2, -0.65, 0.02], 0.02);
+}
+function feStair(g) {
+  const ang = Math.atan2(3, 3.2), len = Math.hypot(3, 3.2);
+  BC(g, 'M_Metal', 2.0, 1.5, 0.28, len, 0.12, 0.03, 0, 0, ang); BC(g, 'M_Metal', 2.0, 1.5, 0.82, len, 0.12, 0.03, 0, 0, ang);
+  for (let i = 1; i < 10; i++) { const x = 0.4 + 3.2 * i / 10, y = 3 * i / 10; B(g, 'M_Metal', x - 0.11, y - 0.03, 0.3, x + 0.11, y, 0.8); }
+}
+const FE = { sheet: '02A', origin: 'BLE', spec: 'brief', d: 1.0, mat: 'M_Metal' };
+def('BK_FE_Platform4W', { ...FE, w: 4, h: 3.0, build() { const g = G(); feRail(g, 0, 4); feStair(g); return g; } });
+def('BK_FE_Platform8', { ...FE, w: 8, h: 3.0, build() { const g = G(); feRail(g, 0, 8); feStair(g); return g; } });
+def('BK_FE_Bottom', { ...FE, w: 0.5, h: 1.8, d: 0.1, build() { const g = G(); B(g, 'M_Metal', 0, -1.8, 0.85, 0.04, 0, 0.89); B(g, 'M_Metal', 0.46, -1.8, 0.85, 0.5, 0, 0.89); for (let y = -1.7; y < 0; y += 0.3) B(g, 'M_Metal', 0, y, 0.86, 0.5, y + 0.03, 0.88); return g; } });
+def('BK_FE_Top', { ...FE, w: 0.5, h: 4.6, d: 1.0, build() { const g = G(); B(g, 'M_Metal', 0, 0, 0.6, 0.04, 4.6, 0.64); B(g, 'M_Metal', 0.46, 0, 0.6, 0.5, 4.6, 0.64); for (let y = 0.3; y < 4.5; y += 0.3) B(g, 'M_Metal', 0, y, 0.61, 0.5, y + 0.03, 0.63); B(g, 'M_Metal', 0, 4.56, -0.4, 0.04, 4.6, 0.64); B(g, 'M_Metal', 0.46, 4.56, -0.4, 0.5, 4.6, 0.64); return g; } });
+const POLE = [[-0.08, -0.08, 0.08, 0.08, 0, 3]];
+def('ST_PedSignal', { sheet: '02A', spec: 'brief', w: 0.36, d: 0.3, h: 3.0, mat: 'M_Metal', col: POLE, build() {
+  const g = G(); C(g, 'M_Metal', 0, 0, 0, 0.05, 3.0, 8); B(g, 'M_Metal', -0.17, 2.3, 0.05, 0.17, 2.8, 0.3);
+  B(g, 'Black', -0.13, 2.58, 0.3, 0.13, 2.76, 0.31); B(g, 'Black', -0.13, 2.36, 0.3, 0.13, 2.54, 0.31);
+  g.userData.lamps = [{ kind: 'walk', pos: [0, 2.45, 0.32] }, { kind: 'dont', pos: [0, 2.67, 0.32] }]; return g; } });
+def('ST_StopSign', { sheet: '02A', spec: 'brief', w: 0.8, d: 0.1, h: 3.0, mat: 'StopRed', col: POLE, build() {
+  const g = G(); C(g, 'M_Metal', 0, 0, 0, 0.035, 2.7, 6);
+  let m = CA(g, 'PaintWhite', 'z', 0, 2.3, 0.04, 0.4, 0.02, 8); m.rotation.y = Math.PI / 8; m = CA(g, 'StopRed', 'z', 0, 2.3, 0.052, 0.37, 0.02, 8); m.rotation.y = Math.PI / 8;
+  return g; } });
+def('ST_StreetSign', { sheet: '02A', spec: 'brief', w: 0.9, d: 0.9, h: 3.0, mat: 'SignGreen', col: POLE, build() {
+  const g = G(); C(g, 'M_Metal', 0, 0, 0, 0.04, 3.0, 6); B(g, 'SignGreen', -0.45, 2.62, -0.01, 0.45, 2.78, 0.01); B(g, 'SignGreen', -0.01, 2.82, -0.45, 0.01, 2.98, 0.45); return g; } });
+
+// ---------- 02B street furniture ----------
+const FURN = { sheet: '02B', spec: 'proposed' };
+def('ST_Curb4', { ...FURN, spec: 'sheet', sheet: '04A', origin: 'BLE', w: 4, h: 0.15, d: 0.3, mat: 'Curb', build() { const g = G(); B(g, 'Curb', 0, 0, -0.3, 4, 0.15, 0); return g; } });
+def('ST_Curb1', { ...FURN, spec: 'sheet', sheet: '04A', origin: 'BLE', w: 1, h: 0.15, d: 0.3, mat: 'Curb', build() { const g = G(); B(g, 'Curb', 0, 0, -0.3, 1, 0.15, 0); return g; } });
+// ramp: origin at the curb-face centre, runs back (into the sidewalk) along -Z for 1.80, top drops 0.15 to road level at z=0
+def('ST_CurbRamp', { ...FURN, spec: 'sheet', sheet: '04A', w: 2.0, h: 0.15, d: 1.8, mat: 'Concrete', build() {
+  const g = G(); const a = Math.atan2(0.15, 1.8), L = Math.hypot(0.15, 1.8);
+  BC(g, 'Concrete', 0, -0.075 - 0.04 * Math.cos(a), -0.9, 2.0, 0.08, L, a, 0, 0);
+  BC(g, 'Tactile', 0, -0.115, -0.35, 1.2, 0.01, 0.6, a, 0, 0);
+  return g; } });
+def('ST_TreePit', { ...FURN, w: 1.2, h: 0.04, d: 1.2, mat: 'Soil', build() { const g = G(); B(g, 'Soil', -0.6, -0.02, -0.6, 0.6, 0.0, 0.6); B(g, 'M_Metal', -0.6, 0, -0.6, 0.6, 0.04, -0.54); B(g, 'M_Metal', -0.6, 0, 0.54, 0.6, 0.04, 0.6); B(g, 'M_Metal', -0.6, 0, -0.54, -0.54, 0.04, 0.54); B(g, 'M_Metal', 0.54, 0, -0.54, 0.6, 0.04, 0.54); return g; } });
+def('ST_Tree', { ...FURN, spec: 'brief', w: 4.2, d: 4.2, h: 'param', mat: 'Foliage', params: { h: 7 }, col: [[-0.18, -0.18, 0.18, 0.18, 0, 3]], build(p) {
+  const g = G(), h = p.h; C(g, 'Trunk', 0, 0, 0, 0.16, h * 0.45, 7, 0.7);
+  blob(g, 'Foliage', 0, h * 0.62, 0, 2.1, h * 0.22, 2.1); blob(g, 'FoliageDark', 0.5, h * 0.8, -0.3, 1.5, h * 0.17, 1.5); blob(g, 'Foliage', -0.4, h * 0.9 - 0.4, 0.4, 1.0, h * 0.11, 1.0);
+  return g; } });
+def('ST_FlexPost', { ...FURN, w: 0.12, d: 0.12, h: 1.0, mat: 'PaintWhite', col: [[-0.06, -0.06, 0.06, 0.06, 0, 1]], build() { const g = G(); C(g, 'PaintWhite', 0, 0, 0, 0.06, 1.0, 8); C(g, 'Orange', 0, 0.8, 0, 0.062, 0.08, 8); C(g, 'Black', 0, 0, 0, 0.09, 0.04, 8); return g; } });
+def('ST_LampPost', { ...FURN, spec: 'brief', w: 0.4, d: 0.4, h: 4.5, mat: 'Black', col: [[-0.15, -0.15, 0.15, 0.15, 0, 4.5]], build() {
+  const g = G(); C(g, 'Black', 0, 0, 0, 0.2, 0.6, 8, 0.6); C(g, 'Black', 0, 0.6, 0, 0.07, 3.3, 8); C(g, 'Black', 0, 3.9, 0, 0.16, 0.12, 8);
+  C(g, 'LampGlow', 0, 4.0, 0, 0.14, 0.34, 8, 1.2); C(g, 'Black', 0, 4.34, 0, 0.2, 0.16, 8, 0.1); return g; } });
+def('ST_LampCobra', { ...FURN, spec: 'brief', w: 0.4, d: 2.3, h: 8.0, mat: 'Steel', col: [[-0.15, -0.15, 0.15, 0.15, 0, 8]], build() {
+  const g = G(); C(g, 'Steel', 0, 0, 0, 0.14, 7.6, 8, 0.6); T(g, 'Steel', [0, 7.4, 0], [0, 7.9, 1.6], 0.06); B(g, 'Steel', -0.18, 7.82, 1.5, 0.18, 8.0, 2.1); B(g, 'LampGlow', -0.14, 7.78, 1.55, 0.14, 7.82, 2.05); return g; } });
+// traffic signal: params.h mast height (3-5 m), params.arm horizontal arm length toward +X (0 = pole-mounted). Head faces +Z.
+def('ST_TrafficSignal', { ...FURN, spec: 'brief', w: 'param', d: 0.4, h: 'param', mat: 'M_Metal', params: { h: 4.5, arm: 3.5 }, col: [[-0.14, -0.14, 0.14, 0.14, 0, 4]], build(p) {
+  const g = G(); C(g, 'M_Metal', 0, 0, 0, 0.11, p.h, 8);
+  const hx = p.arm, hy = p.arm !== 0 ? p.h - 0.15 : p.h - 1.1;
+  if (p.arm !== 0) B(g, 'M_Metal', Math.min(0, p.arm), p.h - 0.15, -0.05, Math.max(0, p.arm), p.h - 0.05, 0.05);
+  B(g, 'Black', hx - 0.16, hy - 0.95, -0.12, hx + 0.16, hy, 0.12);
+  const lamps = []; ['red', 'amber', 'green'].forEach((k, i) => { const y = hy - 0.18 - i * 0.3; C(g, 'M_Metal', hx, y - 0.12, 0.12, 0.11, 0.0, 8); B(g, 'Black', hx - 0.13, y + 0.1, 0.12, hx + 0.13, y + 0.13, 0.25); lamps.push({ kind: k, pos: [hx, y, 0.13] }); });
+  g.userData.lamps = lamps; return g; } });
+def('ST_Hydrant', { ...FURN, w: 0.42, d: 0.3, h: 0.78, mat: 'Hydrant', col: [[-0.18, -0.18, 0.18, 0.18, 0, 0.8]], build() {
+  const g = G(); C(g, 'Hydrant', 0, 0, 0, 0.16, 0.08, 8); C(g, 'Hydrant', 0, 0.08, 0, 0.12, 0.55, 8); C(g, 'Hydrant', 0, 0.63, 0, 0.1, 0.15, 8, 0.4);
+  CA(g, 'Hydrant', 'x', 0, 0.45, 0, 0.05, 0.42, 6); CA(g, 'Hydrant', 'z', 0, 0.42, 0.08, 0.06, 0.12, 6); return g; } });
+def('ST_TrashCan', { ...FURN, w: 0.6, d: 0.6, h: 0.9, mat: 'Dumpster', col: [[-0.3, -0.3, 0.3, 0.3, 0, 0.9]], build() { const g = G(); C(g, 'Dumpster', 0, 0, 0, 0.3, 0.86, 10, 1.05); C(g, 'Black', 0, 0.86, 0, 0.3, 0.04, 10); return g; } });
+def('ST_TrashBags', { ...FURN, w: 1.2, d: 0.8, h: 0.6, mat: 'Black', col: [[-0.55, -0.35, 0.55, 0.35, 0, 0.6]], build() { const g = G(); blob(g, 'Black', -0.3, 0.27, 0, 0.3, 0.28, 0.3); blob(g, 'Black', 0.3, 0.25, 0.05, 0.3, 0.26, 0.28); blob(g, 'Rubber', 0.0, 0.45, -0.1, 0.24, 0.17, 0.24); return g; } });
+def('ST_NewsBox', { ...FURN, w: 0.5, d: 0.45, h: 1.1, mat: 'NewsBlue', col: [[-0.25, -0.23, 0.25, 0.23, 0, 1.1]], build() { const g = G(); B(g, 'M_Metal', -0.2, 0, -0.18, 0.2, 0.35, 0.18); B(g, 'NewsBlue', -0.25, 0.35, -0.225, 0.25, 1.1, 0.225); B(g, 'M_Glass', -0.18, 0.75, 0.225, 0.18, 1.0, 0.235); return g; } });
+def('ST_BikeRack', { ...FURN, w: 0.9, d: 0.06, h: 0.9, mat: 'Steel', col: [[-0.45, -0.05, 0.45, 0.05, 0, 0.9]], build() { const g = G(); C(g, 'Steel', -0.4, 0, 0, 0.03, 0.85, 6); C(g, 'Steel', 0.4, 0, 0, 0.03, 0.85, 6); CA(g, 'Steel', 'x', 0, 0.85, 0, 0.03, 0.86, 6); return g; } });
+def('ST_Bench', { ...FURN, w: 1.8, d: 0.65, h: 0.85, mat: 'Wood', col: [[-0.9, -0.32, 0.9, 0.32, 0, 0.85]], build() {
+  const g = G(); B(g, 'Wood', -0.9, 0.42, -0.25, 0.9, 0.47, 0.25); B(g, 'Wood', -0.9, 0.55, -0.3, 0.9, 0.85, -0.25);
+  for (const x of [-0.75, 0.75]) { B(g, 'Black', x - 0.04, 0, -0.25, x + 0.04, 0.45, 0.25); B(g, 'Black', x - 0.03, 0.45, -0.32, x + 0.03, 0.85, -0.27); } return g; } });
+def('ST_BusShelter', { ...FURN, spec: 'brief', w: 4.0, d: 1.5, h: 2.6, mat: 'M_Metal', col: [[-2, -0.75, 2, -0.62, 0, 2.6], [-2, -0.75, -1.88, 0.75, 0, 2.6], [1.88, -0.75, 2, 0.75, 0, 2.6]], build() {
+  const g = G(); for (const x of [-1.95, 1.95]) for (const z of [-0.7, 0.7]) B(g, 'M_Metal', x - 0.05, 0, z - 0.05, x + 0.05, 2.5, z + 0.05);
+  B(g, 'M_Metal', -2, 2.5, -0.75, 2, 2.6, 0.75); B(g, 'M_Glass', -1.9, 0.15, -0.72, 1.9, 2.4, -0.68); B(g, 'M_Glass', -1.98, 0.15, -0.65, -1.92, 2.4, 0.6); B(g, 'M_Glass', 1.92, 0.15, -0.65, 1.98, 2.4, 0.6);
+  B(g, 'Steel', -1.5, 0.45, -0.6, 1.5, 0.5, -0.35); B(g, 'M_Trim', 1.0, 0.6, -0.68, 1.85, 2.2, -0.64); return g; } });
+def('ST_Manhole', { ...FURN, spec: 'brief', w: 0.9, d: 0.9, h: 0.02, mat: 'M_Metal', build() { const g = G(); C(g, 'M_Metal', 0, 0, 0, 0.45, 0.02, 14); return g; } });
+// cellar hatch 1.5 x 1.2, two leaves; params.open 0..1 swings both leaves up (opens)
+def('ST_CellarHatch', { ...FURN, spec: 'brief', w: 1.5, d: 1.2, h: 'param', mat: 'M_Metal', params: { open: 0 }, build(p) {
+  const g = G(); B(g, 'Black', -0.75, -0.02, -0.6, 0.75, 0.005, 0.6);
+  for (const s of [-1, 1]) { const leaf = G(); leaf.position.set(0.75 * s, 0.01, 0); B(leaf, 'M_Metal', s > 0 ? -0.75 : 0, 0, -0.6, s > 0 ? 0 : 0.75, 0.02, 0.6); leaf.rotation.z = -s * p.open * 1.45; g.add(leaf); }
+  return g; } });
+def('ST_SidewalkShed', { ...FURN, spec: 'brief', origin: 'BLE', w: 4.0, d: 2.5, h: 3.2, mat: 'GreenPly', col: [[0, 2.3, 0.15, 2.5, 0, 3.2], [3.85, 2.3, 4, 2.5, 0, 3.2]], build() {
+  const g = G(); for (const x of [0.05, 3.95]) { B(g, 'M_Metal', x - 0.05, 0, 2.3, x + 0.05, 2.8, 2.45); B(g, 'M_Metal', x - 0.05, 0, 0.05, x + 0.05, 2.8, 0.15); }
+  B(g, 'M_Metal', 0, 2.8, 0, 4, 2.95, 2.5); B(g, 'GreenPly', 0, 2.95, 2.38, 4, 3.2, 2.5); B(g, 'GreenPly', 0, 2.95, 0, 4, 3.2, 0.12); B(g, 'LampGlow', 1.9, 2.75, 1.2, 2.1, 2.8, 1.3); return g; } });
+def('ST_JerseyBarrier', { ...FURN, w: 3.0, d: 0.6, h: 0.81, mat: 'Concrete', col: [[-1.5, -0.3, 1.5, 0.3, 0, 0.81]], build() { const g = G(); B(g, 'Concrete', -1.5, 0, -0.3, 1.5, 0.08, 0.3); B(g, 'Concrete', -1.5, 0.08, -0.25, 1.5, 0.3, 0.25); B(g, 'Concrete', -1.5, 0.3, -0.1, 1.5, 0.81, 0.1); return g; } });
+def('ST_BikeLaneBarrier', { ...FURN, w: 1.8, d: 0.3, h: 0.3, mat: 'Concrete', col: [[-0.9, -0.15, 0.9, 0.15, 0, 0.3]], build() { const g = G(); B(g, 'Concrete', -0.9, 0, -0.15, 0.9, 0.3, 0.15); B(g, 'PaintWhite', -0.9, 0.3, -0.15, 0.9, 0.305, 0.15); return g; } });
+def('ST_Cone', { ...FURN, w: 0.36, d: 0.36, h: 0.7, mat: 'Cone', col: [[-0.15, -0.15, 0.15, 0.15, 0, 0.7]], build() { const g = G(); B(g, 'Cone', -0.18, 0, -0.18, 0.18, 0.04, 0.18); C(g, 'Cone', 0, 0.04, 0, 0.14, 0.66, 8, 0.15); C(g, 'PaintWhite', 0, 0.38, 0, 0.09, 0.1, 8, 0.8); return g; } });
+def('ST_HotDogCart', { ...FURN, w: 1.8, d: 0.9, h: 2.2, mat: 'Steel', col: [[-0.9, -0.45, 0.9, 0.45, 0, 2.2]], build() {
+  const g = G(); B(g, 'Steel', -0.8, 0.35, -0.4, 0.8, 1.0, 0.4); B(g, 'M_Trim', -0.8, 1.0, -0.4, 0.8, 1.05, 0.4); CA(g, 'Rubber', 'z', -0.5, 0.25, 0, 0.25, 0.9, 10); B(g, 'Steel', 0.8, 0.8, -0.05, 0.9, 0.85, 0.05);
+  C(g, 'Steel', 0, 1.05, 0, 0.025, 1.0, 6); C(g, 'Canvas', 0, 1.95, 0, 0.9, 0.25, 8, 0.05); return g; } });
+def('ST_ParkFence', { ...FURN, origin: 'BLE', w: 2.0, d: 0.06, h: 1.2, mat: 'Fence', col: [[0, -0.05, 2, 0.05, 0, 1.2]], build() {
+  const g = G(); B(g, 'Fence', 0, 0.1, -0.03, 2, 0.14, 0.03); B(g, 'Fence', 0, 1.06, -0.03, 2, 1.1, 0.03); for (let x = 0.1; x < 2; x += 0.16) B(g, 'Fence', x - 0.015, 0, -0.015, x + 0.015, 1.2, 0.015); B(g, 'Fence', 0, 0, -0.04, 0.06, 1.2, 0.04); return g; } });
+def('ST_Planter', { ...FURN, w: 1.2, d: 0.6, h: 0.9, mat: 'PlanterC', col: [[-0.6, -0.3, 0.6, 0.3, 0, 0.6]], build() { const g = G(); B(g, 'PlanterC', -0.6, 0, -0.3, 0.6, 0.6, 0.3); blob(g, 'Foliage', 0, 0.68, 0, 0.5, 0.22, 0.26); return g; } });
+def('ST_BackyardFence', { ...FURN, origin: 'BLE', w: 2.0, d: 0.05, h: 1.8, mat: 'Wood', col: [[0, -0.05, 2, 0.05, 0, 1.8]], build() { const g = G(); for (let x = 0; x < 2; x += 0.2) B(g, 'Wood', x + 0.01, 0, -0.025, x + 0.19, 1.8, 0.025); return g; } });
+def('ST_Shed', { ...FURN, w: 2.0, d: 1.5, h: 2.2, mat: 'Wood', col: [[-1, -0.75, 1, 0.75, 0, 2.2]], build() { const g = G(); B(g, 'Wood', -1, 0, -0.75, 1, 1.9, 0.75); BC(g, 'M_Roof', 0, 2.05, 0, 2.2, 0.08, 1.7, 0.18, 0, 0); B(g, 'WoodDark', -0.4, 0, 0.75, 0.4, 1.7, 0.78); return g; } });
+def('ST_Dumpster', { ...FURN, w: 1.8, d: 1.0, h: 1.2, mat: 'Dumpster', col: [[-0.9, -0.5, 0.9, 0.5, 0, 1.2]], build() { const g = G(); B(g, 'Dumpster', -0.9, 0.12, -0.5, 0.9, 1.1, 0.5); BC(g, 'Dumpster', 0, 1.14, 0.0, 1.82, 0.06, 1.04, 0.08, 0, 0); for (const x of [-0.75, 0.75]) for (const z of [-0.4, 0.4]) C(g, 'Rubber', x, 0, z, 0.06, 0.12, 6); return g; } });
+
+// ---------- 02C roof props & facade attachments (sheet attached: exact sizes) ----------
+const ROOF = { sheet: '02C', spec: 'sheet' };
+def('RF_StairBulkhead', { ...ROOF, w: 3.0, d: 2.0, h: 2.6, mat: 'M_Brick', col: [[-1.5, -1, 1.5, 1, 0, 2.6]], build() {
+  const g = G(); B(g, 'M_Brick', -1.5, 0, -1, 1.5, 2.45, 1); B(g, 'M_Stone', -1.55, 2.45, -1.05, 1.55, 2.6, 1.05);
+  B(g, 'M_Stone', -1.5, 0, 0.98, -1.25, 2.45, 1.02); B(g, 'M_Stone', 1.25, 0, 0.98, 1.5, 2.45, 1.02);
+  B(g, 'M_Trim', -0.45, 0, 0.98, 0.45, 2.05, 1.02); B(g, 'M_Glass', -0.3, 1.2, 1.02, 0.3, 1.8, 1.03); B(g, 'LampGlow', 0.6, 1.8, 1.0, 0.75, 2.05, 1.06); return g; } });
+def('RF_WaterTower', { ...ROOF, w: 3.0, d: 3.0, h: 9.0, mat: 'Wood', col: [[-1.5, -1.5, 1.5, 1.5, 0, 9]], build() {
+  const g = G(); // stand 4.0, tank 4.0, roof 1.0 (sheet 02C)
+  for (const [x, z] of [[-1.2, -1.2], [1.2, -1.2], [-1.2, 1.2], [1.2, 1.2]]) B(g, 'M_Metal', x - 0.08, 0, z - 0.08, x + 0.08, 4.0, z + 0.08);
+  T(g, 'M_Metal', [-1.2, 0.3, -1.2], [1.2, 3.7, -1.2], 0.03); T(g, 'M_Metal', [1.2, 0.3, 1.2], [-1.2, 3.7, 1.2], 0.03);
+  T(g, 'M_Metal', [-1.2, 0.3, 1.2], [-1.2, 3.7, -1.2], 0.03); T(g, 'M_Metal', [1.2, 0.3, -1.2], [1.2, 3.7, 1.2], 0.03);
+  B(g, 'M_Metal', -1.5, 3.85, -1.5, 1.5, 4.0, 1.5); C(g, 'Wood', 0, 4.0, 0, 1.5, 4.0, 12);
+  for (const y of [4.6, 5.6, 6.6, 7.6]) C(g, 'M_Metal', 0, y, 0, 1.52, 0.06, 12);
+  C(g, 'M_Metal', 0, 8.0, 0, 1.5, 1.0, 12, 0.05); B(g, 'M_Metal', 1.5, 0.0, -0.2, 1.54, 8.0, -0.16); B(g, 'M_Metal', 1.5, 0.0, 0.16, 1.54, 8.0, 0.2); return g; } });
+def('RF_ACUnit', { ...ROOF, w: 1.2, d: 0.8, h: 1.0, mat: 'Steel', col: [[-0.6, -0.4, 0.6, 0.4, 0, 1]], build() {
+  const g = G(); B(g, 'M_Metal', -0.55, 0, -0.35, 0.55, 0.1, 0.35); B(g, 'Steel', -0.6, 0.1, -0.4, 0.6, 1.0, 0.4); C(g, 'M_Metal', 0, 1.0, 0, 0.3, 0.0, 12);
+  for (let x = -0.5; x <= 0.5; x += 0.1) B(g, 'M_Metal', x - 0.01, 0.2, 0.4, x + 0.01, 0.9, 0.41); return g; } });
+def('RF_Vent', { ...ROOF, w: 0.5, d: 0.5, h: 0.8, mat: 'M_Metal', col: [[-0.25, -0.25, 0.25, 0.25, 0, 0.8]], build() { const g = G(); B(g, 'M_Metal', -0.25, 0, -0.25, 0.25, 0.08, 0.25); C(g, 'Steel', 0, 0.08, 0, 0.15, 0.5, 10); C(g, 'M_Metal', 0, 0.58, 0, 0.25, 0.22, 10, 0.3); return g; } });
+def('RF_Chimney', { ...ROOF, w: 0.6, d: 0.6, h: 1.2, mat: 'M_Brick', col: [[-0.3, -0.3, 0.3, 0.3, 0, 1.2]], build() {
+  const g = G(); B(g, 'M_Brick', -0.27, 0, -0.27, 0.27, 0.95, 0.27); B(g, 'M_Stone', -0.3, 0.95, -0.3, 0.3, 1.05, 0.3); C(g, 'M_Metal', -0.12, 1.05, 0, 0.07, 0.15, 8); C(g, 'M_Metal', 0.12, 1.05, 0, 0.07, 0.15, 8); return g; } });
+def('RF_Skylight', { ...ROOF, w: 1.2, d: 1.2, h: 0.4, mat: 'M_Glass', col: [[-0.6, -0.6, 0.6, 0.6, 0, 0.4]], build() { const g = G(); B(g, 'M_Metal', -0.6, 0, -0.6, 0.6, 0.12, 0.6); const m = C(g, 'M_Glass', 0, 0.12, 0, 0.8, 0.28, 4, 0.02); m.rotation.y = Math.PI / 4; return g; } });
+def('RF_Hatch', { ...ROOF, w: 0.9, d: 0.9, h: 0.3, mat: 'M_Metal', params: { open: 0 }, col: [[-0.45, -0.45, 0.45, 0.45, 0, 0.3]], build(p) {
+  const g = G(); B(g, 'Wood', -0.45, 0, -0.45, 0.45, 0.24, 0.45); const lid = G(); lid.position.set(0, 0.24, -0.45); B(lid, 'M_Metal', -0.46, 0, 0, 0.46, 0.06, 0.92); lid.rotation.x = -p.open * 1.3; g.add(lid); return g; } });
+def('RF_SatelliteDish', { ...ROOF, w: 0.8, d: 0.8, h: 1.25, mat: 'Steel', col: [[-0.25, -0.25, 0.25, 0.25, 0, 0.6]], build() {
+  const g = G(); B(g, 'M_Metal', -0.25, 0, -0.25, 0.25, 0.08, 0.25); C(g, 'M_Metal', 0, 0.08, 0, 0.04, 0.52, 6);
+  const d = C(g, 'Steel', 0, 0.85, 0.05, 0.4, 0.08, 12, 0.6); d.rotation.x = 1.1; d.position.y = 0.85; T(g, 'M_Metal', [0, 0.85, 0.1], [0, 0.95, 0.38], 0.015); return g; } });
+const ATTACH = { sheet: '02C', spec: 'sheet', origin: 'BLE' }; // facade attachments: origin on the wall face, project to +Z
+def('RF_FlowerBox', { ...ATTACH, w: 1.3, d: 0.25, h: 0.25, mat: 'M_Trim', build() { const g = G(); B(g, 'M_Trim', 0, 0, 0, 1.3, 0.2, 0.25); for (let x = 0.15; x < 1.3; x += 0.25) blob(g, 'Foliage', x, 0.22, 0.12, 0.13, 0.05, 0.1); return g; } });
+def('RF_WallLamp', { ...ATTACH, w: 0.3, d: 0.3, h: 0.5, mat: 'Black', build() { const g = G(); B(g, 'Black', 0.1, 0.1, 0, 0.2, 0.3, 0.12); C(g, 'LampGlow', 0.15, 0.05, 0.2, 0.08, 0.3, 6); C(g, 'Black', 0.15, 0.35, 0.2, 0.12, 0.15, 6, 0.2); B(g, 'Black', 0.12, 0, 0.18, 0.18, 0.06, 0.22); return g; } });
+def('RF_BladeSign', { ...ATTACH, w: 0.06, d: 0.7, h: 0.9, mat: 'M_Trim', build() { const g = G(); B(g, 'Black', -0.03, 0.85, 0, 0.03, 0.9, 0.7); B(g, 'M_Trim', -0.025, 0, 0.1, 0.025, 0.8, 0.7); B(g, 'PaintYellow', -0.03, 0.06, 0.16, 0.03, 0.74, 0.64); B(g, 'M_Trim', -0.032, 0.1, 0.2, 0.032, 0.7, 0.6); return g; } });
+def('RF_Downspout3', { ...ATTACH, w: 0.12, d: 0.14, h: 3.0, mat: 'M_Metal', build() { const g = G(); C(g, 'M_Metal', 0.06, 0, 0.08, 0.06, 3.0, 8); B(g, 'M_Metal', 0.02, 2.6, 0, 0.1, 2.66, 0.08); return g; } });
+def('RF_Downspout4', { ...ATTACH, w: 0.12, d: 0.14, h: 4.0, mat: 'M_Metal', build() { const g = G(); C(g, 'M_Metal', 0.06, 0, 0.08, 0.06, 4.0, 8); B(g, 'M_Metal', 0.02, 3.6, 0, 0.1, 3.66, 0.08); return g; } });
+
+// ---------- 04A generated sweeps and markings (catalogued so the audit covers them) ----------
+const MARK_Y = 0.012; // markings float 12 mm over asphalt
+const MK = { sheet: '04A', spec: 'sheet', h: 0.005 };
+def('MK_LaneDash', { ...MK, w: 0.10, d: 3.0, mat: 'PaintWhite', build() { const g = G(); B(g, 'PaintWhite', -0.05, 0, -1.5, 0.05, 0.005, 1.5); return g; } });
+def('MK_CenterDash', { ...MK, w: 0.10, d: 3.0, mat: 'PaintYellow', build() { const g = G(); B(g, 'PaintYellow', -0.05, 0, -1.5, 0.05, 0.005, 1.5); return g; } });
+def('MK_DoubleYellow', { ...MK, w: 0.30, d: 'param', mat: 'PaintYellow', params: { len: 10 }, build(p) { const g = G(); B(g, 'PaintYellow', -0.15, 0, -p.len / 2, -0.05, 0.005, p.len / 2); B(g, 'PaintYellow', 0.05, 0, -p.len / 2, 0.15, 0.005, p.len / 2); return g; } });
+def('MK_ParkingLine', { ...MK, w: 0.10, d: 'param', mat: 'PaintWhite', params: { len: 10 }, build(p) { const g = G(); B(g, 'PaintWhite', -0.05, 0, -p.len / 2, 0.05, 0.005, p.len / 2); return g; } });
+def('MK_EdgeLine', { ...MK, w: 0.10, d: 'param', mat: 'PaintWhite', params: { len: 10 }, build(p) { const g = G(); B(g, 'PaintWhite', -0.05, 0, -p.len / 2, 0.05, 0.005, p.len / 2); return g; } });
+def('MK_BikeLane', { ...MK, spec: 'sheet', w: 2.0, d: 'param', mat: 'BikeGreen', params: { len: 10 }, build(p) { const g = G(); B(g, 'BikeGreen', -1, 0, -p.len / 2, 1, 0.004, p.len / 2); return g; } });
+def('MK_BikeDash', { ...MK, w: 2.0, d: 1.0, mat: 'BikeGreen', build() { const g = G(); B(g, 'BikeGreen', -1, 0, -0.5, 1, 0.004, 0.5); return g; } });
+def('MK_BikeStencil', { ...MK, w: 1.0, d: 1.8, mat: 'PaintWhite', build() { // origin centre, faces +Z (rider reads it travelling +Z)
+  const g = G(); const y0 = 0.004, y1 = 0.009;
+  for (const z of [-0.55, 0.55]) { B(g, 'PaintWhite', -0.32, y0, z - 0.32, 0.32, y1, z - 0.24); B(g, 'PaintWhite', -0.32, y0, z + 0.24, 0.32, y1, z + 0.32); B(g, 'PaintWhite', -0.32, y0, z - 0.32, -0.24, y1, z + 0.32); B(g, 'PaintWhite', 0.24, y0, z - 0.32, 0.32, y1, z + 0.32); }
+  BC(g, 'PaintWhite', 0, (y0 + y1) / 2, 0, 0.08, y1 - y0, 0.95, 0, 0.5, 0); B(g, 'PaintWhite', -0.5, y0, 0.5, 0.5, y1, 0.58); B(g, 'PaintWhite', -0.06, y0, -0.9, 0.06, y1, 0.9); return g; } });
+def('MK_Arrow', { ...MK, w: 0.6, d: 1.8, mat: 'PaintWhite', build() { const g = G(); B(g, 'PaintWhite', -0.08, 0.004, -0.9, 0.08, 0.009, 0.4); BC(g, 'PaintWhite', -0.15, 0.0065, 0.62, 0.12, 0.005, 0.66, 0, -0.6, 0); BC(g, 'PaintWhite', 0.15, 0.0065, 0.62, 0.12, 0.005, 0.66, 0, 0.6, 0); return g; } });
+def('MK_CrosswalkBar', { ...MK, w: 0.6, d: 4.0, mat: 'PaintWhite', build() { const g = G(); B(g, 'PaintWhite', -0.3, 0, -2, 0.3, 0.005, 2); return g; } });
+def('MK_StopBar', { ...MK, w: 3.5, d: 0.4, mat: 'PaintWhite', build() { const g = G(); B(g, 'PaintWhite', -1.75, 0, -0.2, 1.75, 0.005, 0.2); return g; } });
+def('MK_BufferHatch', { ...MK, spec: 'proposed', w: 'param', d: 3.0, mat: 'PaintWhite', params: { w: 1.5 }, build(p) {
+  const g = G(); const L = Math.hypot(p.w, p.w) - 0.2; BC(g, 'PaintWhite', 0, 0.0025, 0, 0.15, 0.005, L, 0, Math.PI / 4, 0); return g; } });
+
+// Generated sweeps: build(params) returns geometry from an outline. Origin: world (placed at 0,0,0).
+def('GEN_RoadSurface', { sheet: '04A', spec: 'sheet', w: 'param', h: 0.05, d: 'param', mat: 'Asphalt', params: { x0: 0, z0: 0, x1: 10, z1: 10 }, build(p) { const g = G(); B(g, 'Asphalt', p.x0, Y_ROAD - 0.05, p.z0, p.x1, Y_ROAD, p.z1); return g; } });
+def('GEN_SidewalkStrip', { sheet: '04A', spec: 'sheet', origin: 'BLE', w: 'param', h: 0.15, d: 'param', mat: 'Sidewalk', params: { len: 10, width: 4, ramps: [] }, build(p) {
+  // local: X along the property line, Z out toward the street; curb is the outer 0.30
+  const g = G(); const W = p.width, cuts = [...(p.ramps || [])].sort((a, b) => a - b);
+  let s = 0; const seg = (a, b, full) => { if (b - a < 1e-3) return; B(g, 'Sidewalk', a, Y_ROAD, 0, b, 0, full ? W - CURB_W : W - 1.8); if (full) B(g, 'Curb', a, Y_ROAD - 0.05, W - CURB_W, b, 0, W); };
+  for (const c of cuts) { seg(s, c - 1, true); seg(c - 1, c + 1, false); s = c + 1; }
+  seg(s, p.len, true); return g; } });
+def('GEN_SidewalkCorner', { sheet: '04A', spec: 'sheet', origin: 'CORNER', w: 'param', h: 0.15, d: 'param', mat: 'Sidewalk', params: { wa: 4, wb: 4, r: 4 }, build(p) {
+  const g = G(); const geo = cornerGeos(p.wa, p.wb, p.r);
+  g.add(new THREE.Mesh(geo.walk, M('Sidewalk'))); g.add(new THREE.Mesh(geo.curb, M('Curb'))); return g; } });
+def('GEN_Slab', { sheet: '04A', spec: 'proposed', w: 'param', h: 'param', d: 'param', mat: 'Concrete', params: { x0: 0, z0: 0, x1: 1, z1: 1, y0: -0.15, y1: 0, mat: 'Concrete' }, build(p) { const g = G(); B(g, p.mat, p.x0, p.y0, p.z0, p.x1, p.y1, p.z1); return g; } });
+def('GEN_RoofDeck', { sheet: '04B', spec: 'brief', w: 'param', h: 0.12, d: 'param', mat: 'M_Roof', params: { x0: 0, z0: 0, x1: 1, z1: 1, y: 10 }, build(p) { const g = G(); B(g, 'M_Roof', p.x0, p.y - 0.1, p.z0, p.x1, p.y + 0.02, p.z1); return g; } });
+def('GEN_BuildingMass', { sheet: '04B', spec: 'brief', w: 'param', h: 'param', d: 'param', mat: 'M_Brick', params: { x0: 0, z0: 0, x1: 1, z1: 1, y: 10 }, build(p) { const g = G(); B(g, 'M_Brick', p.x0, 0, p.z0, p.x1, p.y, p.z1); return g; } });
+
+// prism geometry from a 2D outline (x,z pairs), y0..y1, flat normals. Used for rounded curb returns.
+function prismGeo(outline, y0, y1, walls = true) {
+  const pos = [], v2 = outline.map(([x, z]) => new THREE.Vector2(x, z));
+  if (THREE.ShapeUtils.isClockWise(v2)) v2.reverse();
+  const tris = THREE.ShapeUtils.triangulateShape(v2, []);
+  for (const [a, b, c] of tris) { for (const i of [a, c, b]) pos.push(v2[i].x, y1, v2[i].y); }
+  if (walls) for (let i = 0; i < v2.length; i++) {
+    const a = v2[i], b = v2[(i + 1) % v2.length];
+    pos.push(a.x, y0, a.y, b.x, y1, b.y, b.x, y0, b.y, a.x, y0, a.y, a.x, y1, a.y, b.x, y1, b.y);
+  }
+  const geo = new THREE.BufferGeometry(); geo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3)); geo.computeVertexNormals(); return geo;
+}
+function arcPts(cx, cz, r, a0, a1, n) { const out = []; for (let i = 0; i <= n; i++) { const a = a0 + (a1 - a0) * i / n; out.push([cx + Math.cos(a) * r, cz + Math.sin(a) * r]); } return out; }
+// corner piece: property corner at origin, sidewalk spans x∈[0,wa], z∈[0,wb]; outer corner (wa,wb) rounded by r
+function cornerGeos(wa, wb, r) {
+  const c = CURB_W, n = 8;
+  const outerArc = r > 0 ? arcPts(wa - r, wb - r, r, 0, Math.PI / 2, n) : [[wa, wb]];
+  const innerArc = r > 0 ? arcPts(wa - r, wb - r, Math.max(r - c, 0.01), 0, Math.PI / 2, n) : [[wa - c, wb - c]];
+  const walk = [[0, 0], [wa - c, 0], ...innerArc.map(([x, z]) => [Math.min(x, wa - c), Math.min(z, wb - c)]), [0, wb - c]];
+  const curb = [[wa - c, 0], [wa, 0], ...outerArc, [0, wb], [0, wb - c], ...innerArc.slice().reverse().map(([x, z]) => [Math.min(x, wa - c), Math.min(z, wb - c)])];
+  return { walk: prismGeo(walk, Y_ROAD, 0, false), curb: prismGeo(curb, Y_ROAD - 0.05, 0, true) };
+}
+
+// ---------- 03A vehicles (L x W x H, wheelbase and wheel Ø read off the sheet). Origin centre footprint, front +Z ----------
+const PERMUTE_ZYX = new THREE.Matrix4().set(0, 1, 0, 0, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 0, 1);
+// side-profile prism: pts are [z, y] pairs (side view), extruded across x∈[x0,x1]
+function profile(g, mat, pts, x0, x1) {
+  const geo = prismGeo(pts, x0, x1, true); geo.applyMatrix4(PERMUTE_ZYX);
+  const m = new THREE.Mesh(geo, M(mat)); g.add(m); return m;
+}
+function wheelSet(g, hw, axles, d, tw = 0.22, dualRear = false) {
+  axles.forEach((z, i) => { for (const s of [-1, 1]) {
+    const n = dualRear && i === axles.length - 1 ? 2 : 1;
+    for (let k = 0; k < n; k++) { const x = s * (hw - tw / 2 - 0.03 - k * (tw + 0.02)); CA(g, 'Rubber', 'x', x, d / 2, z, d / 2, tw, 12); CA(g, 'Steel', 'x', x + s * 0.006, d / 2, z, d * 0.3, tw, 8); }
+  } });
+}
+function carLamps(g, hw, hl, y0, y1) {
+  for (const s of [-1, 1]) { B(g, 'HeadLamp', s * hw - s * 0.36, y0, hl - 0.03, s * hw - s * 0.08, y1, hl + 0.004); B(g, 'TailLamp', s * hw - s * 0.3, y0, -hl - 0.004, s * hw - s * 0.06, y1, -hl + 0.03); }
+}
+function vehicle(o) {
+  const g = G(), hl = o.L / 2, hw = o.W / 2;
+  profile(g, o.paint, o.body, -hw, hw);
+  if (o.glass) profile(g, 'M_Glass', o.glass, -hw + 0.07, hw - 0.07);
+  if (o.roof) B(g, o.roofMat || o.paint, -hw + 0.1, o.H - 0.06, o.roof[0], hw - 0.1, o.H, o.roof[1]);
+  B(g, 'Rubber', -hw + 0.03, o.wd * 0.4, hl - 0.06, hw - 0.03, o.wd * 0.4 + 0.24, hl); B(g, 'Rubber', -hw + 0.03, o.wd * 0.4, -hl, hw - 0.03, o.wd * 0.4 + 0.24, -hl + 0.06);
+  wheelSet(g, hw, o.axles, o.wd, o.tw || 0.22, o.dual);
+  carLamps(g, hw, hl, o.lampY[0], o.lampY[1]);
+  if (o.extra) o.extra(g, hl, hw);
+  return g;
+}
+const VEH = { sheet: '03A', spec: 'sheet' };
+const VEHICLE_DEFS = {
+  VEH_SUV: { L: 4.90, W: 1.95, H: 1.80, wb: 2.85, wd: 0.72, paint: 'VehBlack', axles: [1.53, -1.32], lampY: [0.82, 0.96],
+    body: [[2.45, 0.32], [2.45, 0.86], [2.3, 1.05], [0.95, 1.12], [-2.4, 1.12], [-2.45, 1.0], [-2.45, 0.32]],
+    glass: [[0.95, 1.12], [0.35, 1.74], [-2.25, 1.74], [-2.38, 1.12]], roof: [-2.25, 0.35] },
+  VEH_Taxi: { L: 4.90, W: 1.85, H: 1.50, wb: 2.85, wd: 0.66, paint: 'TaxiTeal', roofMat: 'TaxiCream', axles: [1.5, -1.35], lampY: [0.68, 0.8], proj: 0.16,
+    body: [[2.45, 0.28], [2.45, 0.72], [2.32, 0.86], [0.8, 0.94], [-1.35, 0.98], [-2.38, 0.93], [-2.45, 0.75], [-2.45, 0.28]],
+    glass: [[0.8, 0.94], [0.0, 1.44], [-0.85, 1.44], [-1.35, 0.98]], roof: [-0.85, 0.0],
+    extra(g, hl, hw) { for (const s of [-1, 1]) for (let z = -2.2; z < 2.2; z += 0.4) B(g, (Math.round(z / 0.4) % 2) ? 'TaxiCream' : 'TaxiTeal', s * hw - 0.004, 0.76, z, s * hw + 0.004, 0.86, z + 0.4); B(g, 'TaxiCream', -0.25, 1.5, -0.55, 0.25, 1.66, -0.3); } },
+  VEH_Hatchback: { L: 4.20, W: 1.80, H: 1.50, wb: 2.60, wd: 0.64, paint: 'Silver', axles: [1.25, -1.35], lampY: [0.7, 0.82],
+    body: [[2.1, 0.27], [2.1, 0.72], [1.95, 0.88], [0.65, 0.96], [-2.02, 1.0], [-2.1, 0.85], [-2.1, 0.27]],
+    glass: [[0.65, 0.96], [-0.05, 1.44], [-1.75, 1.44], [-2.02, 1.0]], roof: [-1.75, -0.05] },
+  VEH_DeliveryVan: { L: 5.90, W: 2.00, H: 2.50, wb: 3.60, wd: 0.72, paint: 'VanWhite', axles: [2.0, -1.6], lampY: [0.85, 1.0],
+    body: [[2.95, 0.35], [2.95, 0.88], [2.8, 1.12], [2.08, 1.25], [1.28, 2.44], [1.1, 2.5], [-2.95, 2.5], [-2.95, 0.35]],
+    glass: null, extra(g, hl, hw) { profile(g, 'M_Glass', [[2.1, 1.25], [1.3, 2.42], [1.26, 2.42], [2.06, 1.25]], -hw + 0.12, hw - 0.12); for (const s of [-1, 1]) B(g, 'M_Glass', s * hw - 0.005, 1.35, 1.25, s * hw + 0.005, 2.05, 2.0); } },
+  VEH_Minivan: { L: 5.10, W: 2.00, H: 1.80, wb: 3.00, wd: 0.68, paint: 'MinivanBlue', axles: [1.63, -1.37], lampY: [0.78, 0.92],
+    body: [[2.55, 0.3], [2.55, 0.8], [2.4, 0.98], [1.1, 1.06], [-2.5, 1.08], [-2.55, 0.95], [-2.55, 0.3]],
+    glass: [[1.1, 1.06], [0.25, 1.74], [-2.3, 1.74], [-2.5, 1.08]], roof: [-2.3, 0.25] },
+  VEH_BoxTruck: { L: 7.50, W: 2.40, H: 3.40, wb: 4.20, wd: 0.85, paint: 'TruckWhite', axles: [2.55, -1.65], lampY: [0.95, 1.12], tw: 0.24, dual: true,
+    body: [[3.75, 0.55], [3.75, 1.4], [3.6, 1.6], [3.3, 2.65], [2.0, 2.7], [2.0, 0.55]], bodyW: 2.2,
+    extra(g, hl, hw) { profile(g, 'M_Glass', [[3.62, 1.62], [3.32, 2.6], [3.28, 2.6], [3.58, 1.62]], -1.0, 1.0); B(g, 'TruckWhite', -1.2, 0.95, -3.75, 1.2, 3.4, 1.85); B(g, 'M_Metal', -0.5, 0.55, -3.6, 0.5, 0.95, 2.0); B(g, 'M_Metal', -1.2, 0.95, -3.76, 1.2, 1.05, 1.85); } },
+};
+for (const [id, o] of Object.entries(VEHICLE_DEFS)) def(id, { ...VEH, w: o.W, h: o.H, d: o.L, proj: o.proj || 0, mat: o.paint, col: [[-o.W / 2, -o.L / 2, o.W / 2, o.L / 2, 0, o.H]],
+  build() { if (o.bodyW) { const oo = { ...o, W: o.bodyW }; const g = vehicle(oo); return g; } return vehicle(o); } });
+// box truck: the cab is narrower (2.2) than the 2.40 box; the box is added in extra() so the overall width stays 2.40
+
+// Delivery e-bike (03A #7): wheelbase 1.20, wheel Ø0.66, length 1.85, bars 0.68 wide at 1.05, seat 0.85,
+// orange insulated box 0.45 W x 0.35 D x 0.40 H on the rear rack. Parts are split so the bike can steer/spin.
+const BIKE = { wheelR: 0.33, wb: 1.2, headZ: 0.42, barY: 1.05, barZ: 0.30, seatY: 0.85, boxY: 0.76 };
+function buildBikeParts() {
+  const frame = G(), steer = G(), wheelF = G(), wheelR = G(), box = G(), lid = G();
+  const wheel = w => { CA(w, 'Rubber', 'x', 0, 0, 0, BIKE.wheelR, 0.06, 16); CA(w, 'Steel', 'x', 0, 0, 0, BIKE.wheelR - 0.04, 0.03, 16); CA(w, 'M_Metal', 'x', 0, 0, 0, 0.05, 0.1, 8); for (let i = 0; i < 3; i++) BC(w, 'Steel', 0, 0, 0, 0.012, BIKE.wheelR * 1.9, 0.012, i * Math.PI / 3, 0, 0); };
+  wheel(wheelF); wheel(wheelR);
+  const BBp = [0, 0.3, -0.12], headLo = [0, 0.62, BIKE.headZ], headHi = [0, 0.86, 0.36], seatTop = [0, 0.76, -0.3];
+  T(frame, 'BikeFrame', headLo, BBp, 0.035); T(frame, 'BikeFrame', BBp, seatTop, 0.03); T(frame, 'BikeFrame', headLo, headHi, 0.035);
+  for (const s of [-1, 1]) { T(frame, 'BikeFrame', [s * 0.06, 0.3, -0.12], [s * 0.06, BIKE.wheelR, -0.6], 0.016); T(frame, 'BikeFrame', [s * 0.05, 0.72, -0.28], [s * 0.06, BIKE.wheelR, -0.6], 0.014); T(frame, 'M_Metal', [s * 0.07, 0.74, -0.38], [s * 0.07, BIKE.wheelR, -0.62], 0.01); }
+  BC(frame, 'Battery', 0, 0.48, 0.15, 0.09, 0.1, 0.42, Math.atan2(0.32, 0.54), 0, 0);
+  T(frame, 'M_Metal', [0, 0.76, -0.3], [0, 0.82, -0.32], 0.014); B(frame, 'Black', -0.08, 0.82, -0.45, 0.08, 0.85, -0.2);
+  B(frame, 'M_Metal', -0.09, 0.73, -0.86, 0.09, 0.75, -0.38); C(frame, 'M_Metal', 0, 0.26, -0.12, 0.06, 0.08, 8);
+  // box 0.45 W x 0.35 D x 0.40 H, sits on the rack; lid hinged at the rear edge
+  B(box, 'Orange', -0.225, 0, -0.175, 0.225, 0.37, 0.175); for (const s of [-1, 1]) B(box, 'OrangeDark', s * 0.13 - 0.02, -0.002, -0.177, s * 0.13 + 0.02, 0.372, 0.177);
+  lid.position.set(0, 0.37, -0.175); B(lid, 'Orange', -0.225, 0, 0, 0.225, 0.03, 0.35); box.add(lid);
+  box.position.set(0, BIKE.boxY, -0.615); frame.add(box);
+  // steering assembly, pivot at the head tube
+  steer.position.set(0, 0, BIKE.headZ);
+  const sz = v => [v[0], v[1], v[2] - BIKE.headZ];
+  for (const s of [-1, 1]) T(steer, 'BikeFrame', sz([s * 0.05, 0.62, 0.42]), sz([s * 0.05, BIKE.wheelR, 0.6]), 0.016);
+  T(steer, 'M_Metal', sz(headHi), sz([0, 1.02, BIKE.barZ]), 0.02);
+  T(steer, 'Black', sz([-0.3, BIKE.barY - 0.01, BIKE.barZ - 0.06]), sz([0.3, BIKE.barY - 0.01, BIKE.barZ - 0.06]), 0.014);
+  for (const s of [-1, 1]) { T(steer, 'Black', sz([s * 0.3, BIKE.barY - 0.01, BIKE.barZ - 0.06]), sz([s * 0.34, BIKE.barY, BIKE.barZ - 0.12]), 0.014); }
+  B(steer, 'Black', -0.045, 1.06, 0.29 - BIKE.headZ, 0.045, 1.08, 0.33 - BIKE.headZ); // phone mount
+  const phone = BC(steer, 'Black', 0, 1.12, 0.3 - BIKE.headZ, 0.085, 0.15, 0.012, -0.55, 0, 0);
+  C(steer, 'LampGlow', 0, 0.78, 0.47 - BIKE.headZ, 0.04, 0.06, 6).rotation.x = Math.PI / 2;
+  wheelF.position.set(0, BIKE.wheelR, 0.6 - BIKE.headZ); steer.add(wheelF);
+  wheelR.position.set(0, BIKE.wheelR, -0.6); frame.add(wheelR);
+  return { frame, steer, wheelF, wheelR, box, lid, phone };
+}
+def('VEH_EBike', { ...VEH, w: 0.68, h: 1.16, d: 1.86, mat: 'BikeFrame', build() { const p = buildBikeParts(); const g = G(); g.add(p.frame); g.add(p.steer); return g; } });
+
+// ---------- 03C characters: one shared skeleton, forward kinematics, parts are boxes ----------
+// Character local frame: faces +Z, +X is the character's left. Joint rotations are Euler XYZ radians;
+// +X on a hip/shoulder swings the limb backward, -X forward; +X on the spine leans forward.
+const PART_LIST = ['pelvis', 'torso', 'head', 'hair', 'uArmL', 'uArmR', 'fArmL', 'fArmR', 'handL', 'handR', 'thighL', 'thighR', 'shinL', 'shinR', 'footL', 'footR'];
+const _jm = new THREE.Matrix4(), _jq = new THREE.Quaternion(), _je = new THREE.Euler(), _jv = new THREE.Vector3(), _js = new THREE.Vector3(1, 1, 1), _qI = new THREE.Quaternion();
+const JOINT = {}; for (const n of ['pelvis', 'spine', 'neck', 'shL', 'shR', 'elL', 'elR', 'hipL', 'hipR', 'knL', 'knR']) JOINT[n] = new THREE.Matrix4();
+function jointMat(parent, ox, oy, oz, r, out) {
+  _je.set(r ? r[0] : 0, r ? r[1] : 0, r ? r[2] : 0, 'XYZ'); _jq.setFromEuler(_je);
+  _jm.compose(_jv.set(ox, oy, oz), _jq, _js.set(1, 1, 1)); return out.multiplyMatrices(parent, _jm);
+}
+function partMat(joint, cx, cy, cz, sx, sy, sz, out) { _jm.compose(_jv.set(cx, cy, cz), _qI, _js.set(sx, sy, sz)); return out.multiplyMatrices(joint, _jm); }
+// k = height / 1.75. out maps part name -> Matrix4 (unit box transform). hairStyle scales the hair/helmet box.
+function solveFK(k, pose, root, out, hair = [0.22, 0.05, 0.24]) {
+  const P = pose;
+  const pelvis = jointMat(root, 0, 0.95 * k + (P.dy || 0), 0, P.pelvis, JOINT.pelvis);
+  partMat(pelvis, 0, 0, 0, 0.34 * k, 0.18 * k, 0.2 * k, out.pelvis);
+  const spine = jointMat(pelvis, 0, 0.05 * k, 0, P.spine, JOINT.spine);
+  partMat(spine, 0, 0.26 * k, 0, 0.4 * k, 0.52 * k, 0.24 * k, out.torso);
+  const neck = jointMat(spine, 0, 0.52 * k, 0, P.neck, JOINT.neck);
+  partMat(neck, 0, 0.12 * k, 0.01 * k, 0.2 * k, 0.23 * k, 0.22 * k, out.head);
+  partMat(neck, 0, (0.235 + hair[1] / 2 - 0.02) * k, 0, hair[0] * k, hair[1] * k, hair[2] * k, out.hair);
+  for (const [S, s] of [['L', 1], ['R', -1]]) {
+    const sh = jointMat(spine, s * 0.25 * k, 0.47 * k, 0, P['sh' + S], JOINT['sh' + S]);
+    partMat(sh, 0, -0.145 * k, 0, 0.1 * k, 0.29 * k, 0.1 * k, out['uArm' + S]);
+    const el = jointMat(sh, 0, -0.29 * k, 0, P['el' + S], JOINT['el' + S]);
+    partMat(el, 0, -0.135 * k, 0, 0.09 * k, 0.27 * k, 0.09 * k, out['fArm' + S]);
+    partMat(el, 0, -0.32 * k, 0, 0.08 * k, 0.1 * k, 0.1 * k, out['hand' + S]);
+    const hp = jointMat(pelvis, s * 0.1 * k, -0.03 * k, 0, P['hip' + S], JOINT['hip' + S]);
+    partMat(hp, 0, -0.215 * k, 0, 0.15 * k, 0.43 * k, 0.16 * k, out['thigh' + S]);
+    const kn = jointMat(hp, 0, -0.43 * k, 0, P['kn' + S], JOINT['kn' + S]);
+    partMat(kn, 0, -0.225 * k, 0, 0.12 * k, 0.45 * k, 0.13 * k, out['shin' + S]);
+    partMat(kn, 0, -0.445 * k, 0.06 * k, 0.11 * k, 0.07 * k, 0.26 * k, out['foot' + S]);
+  }
+  return out;
+}
+const POSES = {
+  idle: { spine: [0.02, 0, 0], shL: [0.05, 0, 0.08], shR: [0.05, 0, -0.08], elL: [-0.15, 0, 0], elR: [-0.15, 0, 0] },
+  wave: { spine: [0, 0, 0], shL: [0.05, 0, 0.08], shR: [-0.2, 0, -2.6], elR: [-0.6, 0, 0], elL: [-0.15, 0, 0] },
+  take_bag: { spine: [0.15, 0, 0], shL: [-1.2, 0, 0.1], shR: [-1.2, 0, -0.1], elL: [-0.3, 0, 0], elR: [-0.3, 0, 0] },
+  walk_bag: { spine: [0.04, 0, 0], shL: [0, 0, 0.1], shR: [-0.5, 0, -0.1], elR: [-1.2, 0, 0] },
+  photo: { spine: [-0.05, 0, 0], shL: [-1.6, 0, 0.3], shR: [-1.6, 0, -0.3], elL: [-1.1, 0, 0], elR: [-1.1, 0, 0], neck: [-0.2, 0, 0] },
+  shoo: { spine: [0.05, 0, 0], shR: [-1.4, 0, -0.4], elR: [-0.5, 0, 0], shL: [0.1, 0, 0.1] },
+  sit: { dy: -0.5, pelvis: [-0.2, 0, 0], spine: [0.1, 0, 0], hipL: [-1.5, 0, 0.1], hipR: [-1.5, 0, -0.1], knL: [0.2, 0, 0], knR: [0.2, 0, 0], shL: [0.3, 0, 0.3], shR: [0.3, 0, -0.3] },
+  // rider on bike (03C key frames). Legs are animated by pedal phase on top of these.
+  pedal: { spine: [0.55, 0, 0], neck: [-0.45, 0, 0], shL: [-1.05, 0, 0.12], shR: [-1.05, 0, -0.12], elL: [-0.35, 0, 0], elR: [-0.35, 0, 0], hipL: [-1.15, 0, 0], hipR: [-1.15, 0, 0], knL: [1.3, 0, 0], knR: [1.3, 0, 0] },
+  coast: { spine: [0.5, 0, 0], neck: [-0.4, 0, 0], shL: [-1.0, 0, 0.12], shR: [-1.0, 0, -0.12], elL: [-0.35, 0, 0], elR: [-0.35, 0, 0], hipL: [-1.0, 0, 0.05], hipR: [-1.0, 0, -0.05], knL: [1.1, 0, 0], knR: [1.1, 0, 0] },
+  stand_sprint: { dy: 0.12, spine: [0.75, 0, 0], neck: [-0.6, 0, 0], shL: [-0.85, 0, 0.12], shR: [-0.85, 0, -0.12], elL: [-0.5, 0, 0], elR: [-0.5, 0, 0], hipL: [-0.6, 0, 0], hipR: [-0.6, 0, 0], knL: [0.8, 0, 0], knR: [0.8, 0, 0] },
+};
+// outfits: colour per part group
+const OUTFITS = {
+  rider: { skin: 'Skin1', hair: 'Helmet', top: 'Hoodie', arm: 'Hoodie', fore: 'Skin1', hand: 'Glove', bottom: 'Shorts', shin: 'Sock', foot: 'Shoe', hairBox: [0.25, 0.12, 0.28], vest: 'HiVis' },
+  c01: { skin: 'Skin4', hair: 'Hair2', top: 'Robe', arm: 'Robe', fore: 'Robe', hand: 'Skin4', bottom: 'Robe', shin: 'Skin4', foot: 'RobeTrim', extra: 'dog' },
+  c02: { skin: 'Skin2', hair: 'Hair1', top: 'Scrubs', arm: 'Scrubs', fore: 'Skin2', hand: 'Skin2', bottom: 'Scrubs', shin: 'Scrubs', foot: 'Shoe' },
+  c03: { skin: 'Skin1', hair: 'Hair2', top: 'Tank', arm: 'Skin1', fore: 'Skin1', hand: 'Skin1', bottom: 'Khaki', shin: 'Skin1', foot: 'Rubber', extra: 'mug' },
+  c04: { skin: 'Skin4', hair: 'Hair3', top: 'Cardigan', arm: 'Cardigan', fore: 'Cardigan', hand: 'Skin4', bottom: 'Floral', shin: 'Skin4', foot: 'Curler', extra: 'walker', hairBox: [0.24, 0.09, 0.26] },
+  c05: { skin: 'Skin3', hair: 'Hair1', top: 'HoodieBlue', arm: 'HoodieBlue', fore: 'HoodieBlue', hand: 'Skin3', bottom: 'Plaid', shin: 'Plaid', foot: 'Shoe', extra: 'phones' },
+  c06: { skin: 'Skin1', hair: 'Hair1', top: 'Suit', arm: 'Suit', fore: 'Suit', hand: 'Skin1', bottom: 'Boxers', shin: 'Skin1', foot: 'Black', extra: 'briefcase' },
+  pedA: { skin: 'Skin2', hair: 'Hair1', top: 'Scrubs', arm: 'Scrubs', fore: 'Skin2', hand: 'Skin2', bottom: 'Scrubs', shin: 'Scrubs', foot: 'Shoe' },
+  pedB: { skin: 'Skin3', hair: 'Hair1', top: 'HoodieBlue', arm: 'HoodieBlue', fore: 'HoodieBlue', hand: 'Skin3', bottom: 'Plaid', shin: 'Plaid', foot: 'Shoe' },
+};
+function partColour(o, part) {
+  if (part === 'pelvis') return o.bottom; if (part === 'torso') return o.top; if (part === 'head') return o.skin; if (part === 'hair') return o.hair;
+  if (part.startsWith('uArm')) return o.arm; if (part.startsWith('fArm')) return o.fore; if (part.startsWith('hand')) return o.hand;
+  if (part.startsWith('thigh')) return o.bottom; if (part.startsWith('shin')) return o.shin; return o.foot;
+}
+// single character as a Group of part meshes; call poseCharacter() to update
+function buildCharacter(outfitId, height = 1.75) {
+  const o = OUTFITS[outfitId], g = G(); g.userData.k = height / 1.75; g.userData.outfit = o; g.userData.parts = {}; g.userData.mats = {};
+  for (const p of PART_LIST) { const m = new THREE.Mesh(UNIT_BOX, M(partColour(o, p))); m.matrixAutoUpdate = false; m.castShadow = true; g.add(m); g.userData.parts[p] = m; g.userData.mats[p] = m.matrix; }
+  if (o.vest) { const v = new THREE.Mesh(UNIT_BOX, M(o.vest)); v.matrixAutoUpdate = false; g.add(v); g.userData.vest = v; }
+  const prop = G(); g.add(prop); g.userData.prop = prop;
+  if (o.extra === 'dog') { B(prop, 'Dog', -0.12, -0.1, -0.08, 0.12, 0.05, 0.12); B(prop, 'Dog', -0.05, 0.02, 0.1, 0.05, 0.12, 0.2); }
+  if (o.extra === 'mug') { C(prop, 'Cup', 0, -0.06, 0, 0.04, 0.1, 8); }
+  if (o.extra === 'briefcase') { B(prop, 'Briefcase', -0.05, -0.32, -0.2, 0.05, -0.02, 0.2); }
+  if (o.extra === 'walker') { const w = G(); for (const x of [-0.25, 0.25]) for (const z of [0.15, 0.55]) C(w, 'Walker', x, 0, z, 0.015, 0.85, 6); B(w, 'Walker', -0.27, 0.82, 0.13, 0.27, 0.85, 0.57); g.add(w); g.userData.walker = w; }
+  if (o.extra === 'phones') g.userData.phones = true;
+  poseCharacter(g, POSES.idle);
+  return g;
+}
+const _fkOut = {}; for (const p of PART_LIST) _fkOut[p] = new THREE.Matrix4();
+const _rootI = new THREE.Matrix4();
+function poseCharacter(g, pose) {
+  const o = g.userData.outfit;
+  solveFK(g.userData.k, pose, _rootI, _fkOut, o.hairBox);
+  for (const p of PART_LIST) g.userData.parts[p].matrix.copy(_fkOut[p]);
+  if (g.userData.vest) g.userData.vest.matrix.copy(_fkOut.torso).multiply(new THREE.Matrix4().makeScale(1.08, 0.9, 1.12));
+  if (g.userData.prop) { g.userData.prop.matrixAutoUpdate = false; g.userData.prop.matrix.copy(_fkOut.handR); g.userData.prop.matrix.multiply(_tmpUnscale.makeScale(1 / (0.08 * g.userData.k), 1 / (0.1 * g.userData.k), 1 / (0.1 * g.userData.k))); }
+}
+const _tmpUnscale = new THREE.Matrix4();
+const CHR = { sheet: '03C', spec: 'sheet', d: 0.4 };
+def('CHR_Rider', { ...CHR, w: 0.68, h: 1.75, build() { return buildCharacter('rider', 1.75); } });
+[['CHR_Customer01', 'c01', 1.72], ['CHR_Customer02', 'c02', 1.68], ['CHR_Customer03', 'c03', 1.85], ['CHR_Customer04', 'c04', 1.60], ['CHR_Customer05', 'c05', 1.78], ['CHR_Customer06', 'c06', 1.82]]
+  .forEach(([id, o, h]) => def(id, { ...CHR, w: 0.62, h, build() { return buildCharacter(o, h); } }));
+def('CHR_PedScrubs', { ...CHR, w: 0.62, h: 1.7, build() { return buildCharacter('pedA', 1.7); } });
+def('CHR_PedHoodie', { ...CHR, w: 0.62, h: 1.76, build() { return buildCharacter('pedB', 1.76); } });
+
+// ---------- 03C cargo: each in intact / damaged / ruined (params.state 0/1/2) ----------
+const CARGO_TYPES = {
+  CARGO_TakeawayBag: { name: 'Takeaway bag', icon: '🥡', w: 0.35, d: 0.20, h: 0.40, fragility: { accel: 0.35, lateral: 0.35, bump: 0.5, lean: 0.2, crash: 0.5 } },
+  CARGO_PizzaStack: { name: 'Pizza stack ×10', icon: '🍕', w: 0.40, d: 0.40, h: 0.50, fragility: { accel: 0.6, lateral: 1.2, bump: 0.6, lean: 2.4, crash: 1.0 } },
+  CARGO_WeddingCake: { name: 'Wedding cake', icon: '🎂', w: 0.40, d: 0.40, h: 0.45, fragility: { accel: 1.6, lateral: 1.6, bump: 1.8, lean: 1.4, crash: 2.0 } },
+  CARGO_GoldfishBag: { name: 'Goldfish bag', icon: '🐟', w: 0.25, d: 0.25, h: 0.35, fragility: { accel: 0.5, lateral: 0.6, bump: 3.0, lean: 0.4, crash: 2.0 } },
+};
+function buildCargo(id, state) {
+  const g = G();
+  if (id === 'CARGO_TakeawayBag') {
+    if (state === 0) { B(g, 'Paper', -0.175, 0, -0.1, 0.065, 0.36, 0.1); B(g, 'PaperDark', -0.175, 0.36, -0.03, 0.065, 0.4, 0.03); B(g, 'Paper', 0.075, 0, -0.1, 0.175, 0.03, 0.1); C(g, 'Cup', 0.125, 0.03, -0.045, 0.045, 0.15, 8, 1.2); C(g, 'Cup', 0.125, 0.03, 0.045, 0.045, 0.15, 8, 1.2); C(g, 'CupLid', 0.125, 0.18, -0.045, 0.05, 0.02, 8); C(g, 'CupLid', 0.125, 0.18, 0.045, 0.05, 0.02, 8); }
+    else if (state === 1) { BC(g, 'Paper', -0.06, 0.15, 0, 0.24, 0.3, 0.2, 0, 0, 0.25); BC(g, 'PaperDark', -0.1, 0.31, 0, 0.24, 0.04, 0.06, 0, 0, 0.25); C(g, 'Cup', 0.125, 0.0, 0.045, 0.045, 0.15, 8, 1.2); CA(g, 'Cup', 'x', 0.1, 0.045, -0.06, 0.045, 0.15, 8); C(g, 'Sauce', 0.12, 0, -0.03, 0.12, 0.005, 10); }
+    else { BC(g, 'Paper', 0, 0.05, 0, 0.3, 0.1, 0.22, 0.1, 0.3, 0.1); BC(g, 'PaperDark', 0.1, 0.11, 0.05, 0.12, 0.04, 0.1, 0.5, 0, 0.3); CA(g, 'Cup', 'x', -0.12, 0.045, 0.08, 0.045, 0.15, 8); CA(g, 'Cup', 'z', 0.12, 0.045, -0.02, 0.045, 0.15, 8); C(g, 'Sauce', 0, 0, 0, 0.2, 0.005, 12); }
+  } else if (id === 'CARGO_PizzaStack') {
+    for (let i = 0; i < 10; i++) {
+      const sh = state === 0 ? 0 : state === 1 ? i * i * 0.0012 : (i % 3 - 1) * 0.06 + i * 0.01, rot = state === 0 ? 0 : state === 1 ? i * 0.02 : (i % 4) * 0.3;
+      const y = state === 2 ? (i < 6 ? i * 0.05 : 0.03 * (i - 6)) : i * 0.05, x = state === 2 && i >= 6 ? (i - 7.5) * 0.12 : sh;
+      BC(g, 'PizzaBox', x, y + 0.025, state === 2 && i >= 6 ? 0.18 : 0, 0.4, 0.048, 0.4, state === 2 && i >= 6 ? 0.2 : 0, rot, state === 2 ? 0.05 * (i % 2) : 0);
+    }
+    if (state === 2) C(g, 'Sauce', 0.05, 0, 0.1, 0.18, 0.004, 10);
+  } else if (id === 'CARGO_WeddingCake') {
+    if (state < 2) {
+      const tilt = state === 1 ? 0.12 : 0, off = state === 1 ? 0.04 : 0;
+      C(g, 'Cake', 0, 0, 0, 0.2, 0.18, 14); C(g, 'CakeRibbon', 0, 0.02, 0, 0.202, 0.03, 14);
+      const t2 = C(g, 'Cake', off, 0.18, 0, 0.15, 0.14, 14); t2.rotation.z = tilt; C(g, 'CakeRibbon', off, 0.2, 0, 0.152, 0.025, 14).rotation.z = tilt;
+      const t3 = C(g, 'Cake', off * 2.2, 0.32, 0, 0.1, 0.13, 12); t3.rotation.z = tilt * 2; blob(g, 'CakeRibbon', off * 2.6, 0.45 - (state ? 0.03 : 0), 0, 0.04, 0.025, 0.04);
+    } else { blob(g, 'Cake', 0, 0.08, 0, 0.26, 0.09, 0.22); blob(g, 'Cake', 0.18, 0.05, 0.1, 0.1, 0.06, 0.08); blob(g, 'CakeRibbon', -0.05, 0.16, 0.05, 0.05, 0.03, 0.05); C(g, 'Cake', -0.15, 0, -0.12, 0.08, 0.04, 8); }
+  } else if (id === 'CARGO_GoldfishBag') {
+    if (state === 0) { blob(g, 'Water', 0, 0.14, 0, 0.125, 0.14, 0.125); C(g, 'Water', 0, 0.26, 0, 0.03, 0.09, 6, 0.6); BC(g, 'Fish', 0, 0.13, 0, 0.03, 0.05, 0.09); }
+    else if (state === 1) { blob(g, 'Water', 0, 0.09, 0, 0.12, 0.09, 0.13); C(g, 'Water', 0.02, 0.17, 0, 0.03, 0.1, 6, 0.6); BC(g, 'Fish', 0, 0.06, 0, 0.03, 0.05, 0.09, 0, 0, 0.9); }
+    else { C(g, 'Water', 0, 0, 0, 0.2, 0.01, 12); B(g, 'Water', -0.08, 0, -0.06, 0.1, 0.04, 0.08); BC(g, 'Fish', 0.05, 0.025, 0.02, 0.09, 0.03, 0.05, 0, 0.5, Math.PI / 2); }
+  }
+  return g;
+}
+for (const [id, c] of Object.entries(CARGO_TYPES)) def(id, { sheet: '03C', spec: 'sheet', w: c.w, d: c.d, h: c.h, mat: 'Paper', params: { state: 0 }, build(p) { return buildCargo(id, p.state || 0); } });
+
+// ---------- 03B apartment interior kit (1 m grid, 2 m sections, 3 m floor-to-floor, 2.70 clear) ----------
+const INT_H = 2.70, INT_T = 0.20, FLOOR_TO_FLOOR = 3.0;
+function intWall(g, x0, x1, holes = []) { // face at z=0, thickness to -z, two-tone
+  wallWithHoles(g, 'InteriorLow', x1 - x0, 0.95, INT_T, holes.map(h => [h[0], h[1], h[2], Math.min(h[3], 0.95)]).filter(h => h[1] < 0.95));
+  const up = G(); wallWithHoles(up, 'Interior', x1 - x0, INT_H, INT_T, holes.filter(h => h[3] > 0.95).map(h => [h[0], Math.max(h[1], 0.95), h[2], h[3]]), 0.95); g.add(up);
+  for (const c of g.children) c.position.x += x0;
+  B(g, 'Skirting', x0, 0, 0, x1, 0.1, 0.015);
+}
+const INTK = { sheet: '03B', spec: 'sheet', origin: 'BLE' };
+def('INT_WallStraight', { ...INTK, w: 2.0, h: INT_H, d: INT_T, mat: 'Interior', build() { const g = G(); intWall(g, 0, 2); return g; } });
+def('INT_WallCornerL', { ...INTK, origin: 'CORNER', w: 2.0, h: INT_H, d: 2.0, mat: 'Interior', build() { const g = G(); const a = G(); intWall(a, 0, 2); a.position.x = -2; g.add(a); const b = G(); intWall(b, 0, 2); b.rotation.y = Math.PI / 2; b.position.set(0, 0, 0); g.add(b); return g; } });
+def('INT_FloorSlab', { ...INTK, origin: 'CF', w: 2.0, h: 0.15, d: 2.0, mat: 'Floor', build() { const g = G(); B(g, 'Floor', -1, -0.15, -1, 1, 0, 1); return g; } });
+def('INT_CeilingSlab', { ...INTK, origin: 'CF', w: 2.0, h: 0.15, d: 2.0, mat: 'Interior', build() { const g = G(); B(g, 'Interior', -1, 0, -1, 1, 0.15, 1); return g; } });
+def('INT_DoorModule', { ...INTK, w: 2.0, h: INT_H, d: 0.24, mat: 'Interior', build() {
+  const g = G(); intWall(g, 0, 2, [[0.5, 0, 1.5, 2.2]]);
+  B(g, 'Door', 0.42, 0, -0.22, 0.5, 2.28, 0.02); B(g, 'Door', 1.5, 0, -0.22, 1.58, 2.28, 0.02); B(g, 'Door', 0.42, 2.2, -0.22, 1.58, 2.28, 0.02);
+  const leaf = G(); leaf.position.set(0.5, 0, -0.06); B(leaf, 'Door', 0, 0, -0.02, 1.0, 2.2, 0.02); B(leaf, 'Plate', 0.425, 1.55, 0.02, 0.575, 1.63, 0.025); C(leaf, 'Chrome', 0.88, 1.0, 0.04, 0.025, 0.06, 6).rotation.x = Math.PI / 2;
+  g.add(leaf); g.userData.leaf = leaf; return g; } });
+def('INT_NumberPlate', { ...INTK, w: 0.15, h: 0.08, d: 0.005, mat: 'Plate', build() { const g = G(); B(g, 'Plate', 0, 0, 0, 0.15, 0.08, 0.005); return g; } });
+def('INT_GlazedDoor', { ...INTK, w: 1.0, h: 2.2, d: 0.05, mat: 'M_Trim', build() { const g = G(); B(g, 'M_Trim', 0, 0, -0.05, 1, 2.2, 0); B(g, 'M_Glass', 0.12, 0.3, -0.06, 0.88, 2.05, 0.01); return g; } });
+def('INT_Vestibule', { ...INTK, w: 3.4, h: INT_H + 0.15, d: 2.4, mat: 'Interior', build() {
+  // external 3.40 x 2.40 (walls 0.20), clear 3.00 x 2.00; front wall (glazed door) at x=0..0.2; open toward +X (corridor)
+  const g = G();
+  const front = G(); intWall(front, 0, 2.4, [[0.7, 0, 1.7, 2.2]]); front.rotation.y = -Math.PI / 2; front.position.set(0, 0, -1.2); g.add(front);
+  const gd = MODULES.INT_GlazedDoor.build(); gd.rotation.y = -Math.PI / 2; gd.position.set(0.14, 0, -0.5); g.add(gd);
+  for (const s of [-1, 1]) { const w = G(); intWall(w, 0, 3.2); w.rotation.y = s > 0 ? Math.PI : 0; w.position.set(s > 0 ? 3.4 : 0.2, 0, s * 1.0); g.add(w); }
+  B(g, 'Floor', 0, -0.15, -1.2, 3.4, 0, 1.2); B(g, 'Interior', 0, INT_H, -1.2, 3.4, INT_H + 0.15, 1.2);
+  B(g, 'Wood', 0.25, 0, -0.4, 0.75, 0.01, 0.4); return g; } });
+def('INT_Corridor4', { ...INTK, origin: 'CF', w: 4.0, h: INT_H + 0.15, d: 2.4, mat: 'Interior', build() {
+  const g = G(); B(g, 'Floor', -2, -0.15, -1.2, 2, 0, 1.2); B(g, 'Interior', -2, INT_H, -1.2, 2, INT_H + 0.15, 1.2);
+  for (const s of [-1, 1]) { const w = G(); intWall(w, 0, 4); w.rotation.y = s > 0 ? Math.PI : 0; w.position.set(s > 0 ? 2 : -2, 0, s * 1.0); g.add(w); } return g; } });
+def('INT_Lift', { ...INTK, w: 2.0, h: INT_H, d: 1.8, mat: 'M_Metal', build() {
+  const g = G(); intWall(g, 0, 2, [[0.4, 0, 1.6, 2.2]]);
+  B(g, 'Steel', 0.32, 0, -0.22, 0.4, 2.3, 0.03); B(g, 'Steel', 1.6, 0, -0.22, 1.68, 2.3, 0.03); B(g, 'Steel', 0.32, 2.2, -0.22, 1.68, 2.3, 0.03);
+  const doors = G(); B(doors, 'Steel', 0.4, 0, -0.12, 1.0, 2.2, -0.08); B(doors, 'Steel', 1.0, 0, -0.12, 1.6, 2.2, -0.08); doors.userData.lift = true; g.add(doors); g.userData.doors = doors;
+  B(g, 'Black', 1.75, 1.12, 0, 1.87, 1.28, 0.02); C(g, 'LampGlow', 1.81, 1.17, 0.02, 0.025, 0.01, 8).rotation.x = Math.PI / 2;
+  B(g, 'Steel', 0.4, -0.15, -1.8, 1.6, 0.0, -0.2); B(g, 'M_Metal', 0.3, 0, -1.8, 0.4, INT_H, -0.2); B(g, 'M_Metal', 1.6, 0, -1.8, 1.7, INT_H, -0.2); B(g, 'M_Metal', 0.3, 0, -1.9, 1.7, INT_H, -1.8); B(g, 'M_Metal', 0.3, 2.4, -1.8, 1.7, 2.5, -0.2);
+  return g; } });
+def('INT_CallButton', { ...INTK, w: 0.12, h: 0.16, d: 0.02, mat: 'Black', build() { const g = G(); B(g, 'Black', 0, 0, 0, 0.12, 0.16, 0.02); return g; } });
+def('INT_MailboxBank', { ...INTK, w: 1.0, h: 0.8, d: 0.2, mat: 'Mailbox', build() { const g = G(); B(g, 'Mailbox', 0, 0, 0, 1, 0.8, 0.2); for (let c = 0; c < 4; c++) for (let r = 0; r < 3; r++) B(g, 'Steel', 0.04 + c * 0.24, 0.04 + r * 0.25, 0.2, 0.22 + c * 0.24, 0.24 + r * 0.25, 0.21); return g; } });
+def('INT_BuzzerPanel', { ...INTK, w: 0.3, h: 0.5, d: 0.03, mat: 'Steel', build() { const g = G(); B(g, 'Steel', 0, 0, 0, 0.3, 0.5, 0.03); for (let i = 0; i < 6; i++) B(g, 'Black', 0.2, 0.06 + i * 0.07, 0.03, 0.24, 0.1 + i * 0.07, 0.035); B(g, 'Black', 0.05, 0.38, 0.03, 0.14, 0.46, 0.035); return g; } });
+def('INT_Radiator', { ...INTK, w: 0.8, h: 0.6, d: 0.15, mat: 'Radiator', build() { const g = G(); for (let x = 0; x < 0.8; x += 0.08) B(g, 'Radiator', x + 0.005, 0.08, 0.02, x + 0.07, 0.6, 0.15); B(g, 'Radiator', 0, 0.12, 0.05, 0.8, 0.16, 0.12); return g; } });
+def('INT_CeilingLight', { ...INTK, origin: 'CF', w: 0.35, h: 0.1, d: 0.35, mat: 'LampGlow', build() { const g = G(); C(g, 'Steel', 0, -0.03, 0, 0.175, 0.03, 12); C(g, 'LampGlow', 0, -0.1, 0, 0.15, 0.07, 12, 0.8); return g; } });
+def('INT_Doormat', { ...INTK, origin: 'CF', w: 0.8, h: 0.015, d: 0.5, mat: 'WoodDark', build() { const g = G(); B(g, 'WoodDark', -0.4, 0, -0.25, 0.4, 0.015, 0.25); return g; } });
+def('INT_Handrail', { ...INTK, w: 1.0, h: 0.06, d: 0.08, mat: 'Wood', build() { const g = G(); CA(g, 'Wood', 'x', 0.5, 0.03, 0.06, 0.025, 1.0, 6); for (const x of [0.1, 0.9]) B(g, 'Steel', x - 0.01, 0, 0, x + 0.01, 0.03, 0.06); return g; } });
+def('INT_Landing', { ...INTK, origin: 'CF', w: 2.2, h: 0.15, d: 1.0, mat: 'Floor', build() { const g = G(); B(g, 'Floor', -1.1, -0.15, -0.5, 1.1, 0, 0.5); return g; } });
+// dogleg stair: 20 risers @ 0.15 = 3.00, 9 treads @ 0.28 = 2.52 run, flights 1.00 wide with a 0.20 gap, landing 2.20 x 1.00 at Z 1.50.
+// Origin: bottom of the lower flight, stairwell front-left corner; flights run along +X, lower flight at z∈[-2.2,-1.2] (+Z = corridor side)
+def('INT_StairDogleg', { ...INTK, origin: 'CORNER', w: 3.52, h: 3.0, d: 2.2, mat: 'Floor', build() {
+  const g = G(), R = 0.15, Tr = 0.28;
+  for (let i = 0; i < 9; i++) { // lower flight: z∈[-2.2,-1.2] (far side), rising toward +X; 10th riser lands on the landing
+    B(g, 'Floor', i * Tr, 0, -2.2, (i + 1) * Tr, (i + 1) * R, -1.2);
+    B(g, 'Floor', 2.52 - (i + 1) * Tr, 1.5, -1.0, 2.52 - i * Tr, 1.5 + (i + 1) * R, 0); // upper flight returns toward -X on the near side
+  }
+  B(g, 'Floor', 2.52, 1.35, -2.2, 3.52, 1.5, 0); // landing
+  B(g, 'Skirting', 0, 0, -1.2, 2.52, 2.4, -1.0); // central wall between flights (the 0.20 gap)
+  T(g, 'Wood', [2.52, 2.4, -1.1], [0, 3.85, -1.1], 0.025); // upper-flight rail
+  return g; } });
+
+// ===================================================================================
+// 4. STREET GRAPH AND GENERATION — sheet 04B: streets on a 4 m grid, blocks are the land left over,
+//    facades extruded along property lines in 4 m bays. Profiles from sheet 04A.
+// ===================================================================================
+// Bands are listed left→right looking along the street from node a to node b. dir: +1 = a→b, -1 = b→a.
+const PROFILES = {
+  avenue: { width: 24, center: 'double', lanes: [['sidewalk', 5.5], ['parking', 3.0, -1], ['travel', 3.5, -1], ['travel', 3.5, 1], ['buffer', 1.5], ['bike', 2.0, 1], ['sidewalk', 5.0]] },
+  street: { width: 20, center: 'double', lanes: [['sidewalk', 4.0], ['parking', 2.5, -1], ['travel', 3.5, -1], ['travel', 3.5, 1], ['buffer', 0.5], ['bike', 2.0, 1], ['sidewalk', 4.0]] },
+  side: { width: 16, center: 'dashed', lanes: [['sidewalk', 4.5], ['travel', 3.5, -1], ['travel', 3.5, 1], ['sidewalk', 4.5]] },
+  alley: { width: 8, center: null, alley: true, lanes: [['alley', 8]] },
+};
+for (const [name, p] of Object.entries(PROFILES)) {
+  p.name = name; let o = -p.width / 2; p.bands = [];
+  for (const [type, w, dir] of p.lanes) { p.bands.push({ type, w, dir: dir || 0, o0: o, o1: o + w, oc: o + w / 2 }); o += w; }
+  const first = p.bands[0], last = p.bands[p.bands.length - 1];
+  p.walkL = first.type === 'sidewalk' ? first.w : 0; p.walkR = last.type === 'sidewalk' ? last.w : 0;
+  p.curbL = -p.width / 2 + p.walkL; p.curbR = p.width / 2 - p.walkR;
+}
+// Street graphs. All node coordinates sit on the 4 m grid. 'oneBlock' was delivery step 1; 'district' is the full map.
+const GRAPHS = {
+  oneBlock: { nodes: { NW: [0, 0], NE: [116, 0], SW: [0, 84], SE: [116, 84] },
+    edges: [['NW', 'NE', 'side'], ['SW', 'SE', 'avenue'], ['NW', 'SW', 'street'], ['SE', 'NE', 'street']] },
+  district: {
+    nodes: { NW: [0, 0], N1: [116, 0], NA: [172, 0], N2: [232, 0], NE: [348, 0], SW: [0, 84], S1: [116, 84], SA: [172, 84], S2: [232, 84], SE: [348, 84] },
+    edges: [['NW', 'N1', 'side'], ['N1', 'NA', 'side'], ['NA', 'N2', 'side'], ['N2', 'NE', 'side'],
+      ['SW', 'S1', 'avenue'], ['S1', 'SA', 'avenue'], ['SA', 'S2', 'avenue'], ['S2', 'SE', 'avenue'],
+      ['NW', 'SW', 'street'], ['N1', 'S1', 'street'], ['N2', 'S2', 'street'], ['SE', 'NE', 'street'],
+      ['NA', 'SA', 'alley']] },
+};
+const v = (x, z) => ({ x, z });
+const vadd = (a, b) => ({ x: a.x + b.x, z: a.z + b.z }), vsub = (a, b) => ({ x: a.x - b.x, z: a.z - b.z }), vmul = (a, s) => ({ x: a.x * s, z: a.z * s });
+const vdot = (a, b) => a.x * b.x + a.z * b.z, vcross = (a, b) => a.x * b.z - a.z * b.x, vlen = a => Math.hypot(a.x, a.z);
+const vnorm = a => { const l = vlen(a) || 1; return { x: a.x / l, z: a.z / l }; };
+const vrot = a => ({ x: -a.z, z: a.x });           // the right-hand side of direction a (world Y up)
+const vat = (p, d, s, r, t) => ({ x: p.x + d.x * s + r.x * t, z: p.z + d.z * s + r.z * t });
+const yawOf = d => Math.atan2(d.x, d.z);            // rotation.y that points local +Z along d
+const yawX = d => Math.atan2(-d.z, d.x);            // rotation.y that points local +X along d
+function lineHit(p, d, q, e) { const den = vcross(d, e); if (Math.abs(den) < 1e-9) return null; const t = vcross(vsub(q, p), e) / den; return vadd(p, vmul(d, t)); }
+
+function buildGraph(def) {
+  const nodes = {};
+  for (const [id, [x, z]] of Object.entries(def.nodes)) nodes[id] = { id, x, z, out: [] };
+  const edges = def.edges.map(([a, b, prof], i) => {
+    const A = nodes[a], Bn = nodes[b], len = Math.hypot(Bn.x - A.x, Bn.z - A.z), dx = (Bn.x - A.x) / len, dz = (Bn.z - A.z) / len;
+    const e = { i, a: A, b: Bn, p: PROFILES[prof], len, dx, dz };
+    A.out.push({ e, to: Bn, dx, dz, ang: Math.atan2(dz, dx), fwd: true });
+    Bn.out.push({ e, to: A, dx: -dx, dz: -dz, ang: Math.atan2(-dz, -dx), fwd: false });
+    return e;
+  });
+  for (const n of Object.values(nodes)) n.out.sort((p, q) => p.ang - q.ang);
+  return { nodes, edges };
+}
+// Planar faces by half-edge walk. With this turn rule, blocks come out with positive signed area
+// and the unbounded outer face negative; the face interior is always on vrot(halfEdgeDir).
+function traceFaces(G) {
+  const seen = new Set(), faces = [];
+  for (const n of Object.values(G.nodes)) for (const h0 of n.out) {
+    if (seen.has(h0)) continue;
+    const halfs = []; let node = n, h = h0;
+    while (!seen.has(h)) {
+      seen.add(h); halfs.push({ node, h });
+      const vtx = h.to, idx = vtx.out.findIndex(o => o.e === h.e && o.fwd !== h.fwd);
+      node = vtx; h = vtx.out[(idx - 1 + vtx.out.length) % vtx.out.length];
+    }
+    let area = 0; for (let i = 0; i < halfs.length; i++) { const a = halfs[i].node, b = halfs[(i + 1) % halfs.length].node; area += a.x * b.z - b.x * a.z; }
+    faces.push({ halfs, area: area / 2 });
+  }
+  return faces;
+}
+function makeBlock(face, id) {
+  const raw = face.halfs.map(({ node, h }) => {
+    const d = v(h.dx, h.dz), nIn = vrot(d), w = h.e.p.width / 2;
+    return { e: h.e, prof: h.e.p, fwd: h.fwd, d, nIn, nOut: vmul(nIn, -1), off: vadd(v(node.x, node.z), vmul(nIn, w)), walk: h.fwd ? h.e.p.walkR : h.e.p.walkL, node };
+  });
+  // merge collinear runs (pass-through nodes) into single sides
+  const sides = [];
+  for (const s of raw) { const last = sides[sides.length - 1]; if (last && Math.abs(vcross(last.d, s.d)) < 1e-6 && vdot(last.d, s.d) > 0 && last.walk === s.walk && last.prof.width === s.prof.width) { last.edges.push(s.e); continue; } sides.push({ ...s, edges: [s.e] }); }
+  if (sides.length > 1) { const f = sides[0], l = sides[sides.length - 1]; if (Math.abs(vcross(l.d, f.d)) < 1e-6 && vdot(l.d, f.d) > 0 && l.walk === f.walk) { f.edges = [...l.edges, ...f.edges]; f.off = l.off; sides.pop(); } }
+  const n = sides.length;
+  const poly = sides.map((s, i) => { const pr = sides[(i - 1 + n) % n]; return lineHit(pr.off, pr.d, s.off, s.d) || s.off; });
+  sides.forEach((s, i) => { s.i = i; s.a = poly[i]; s.b = poly[(i + 1) % n]; s.len = vdot(vsub(s.b, s.a), s.d); s.doors = []; s.ramps = []; });
+  const turn = sides.map((s, i) => vcross(sides[(i - 1 + n) % n].d, s.d));
+  return { id, poly, sides, turn, area: face.area };
+}
+function analyseLayout(def) {
+  const G = buildGraph(def), faces = traceFaces(G);
+  const blocks = [], outers = [];
+  faces.forEach((f, i) => (f.area > 0 ? blocks : outers).push(f));
+  const L = { G, blocks: blocks.map((f, i) => makeBlock(f, 'B' + i)), outer: makeBlock(outers.sort((a, b) => a.area - b.area)[0], 'OUT') };
+  // junctions (alleys excluded) and straight runs between them
+  L.junctions = [];
+  for (const n of Object.values(G.nodes)) {
+    const legs = n.out.filter(o => !o.e.p.alley);
+    if (legs.length < 2) continue;
+    if (legs.length === 2 && legs[0].dx * legs[1].dx + legs[0].dz * legs[1].dz < -0.999) { n.pass = true; continue; }
+    const j = { id: n.id, node: n, p: v(n.x, n.z), legs: [], signal: legs.length >= 3, crossings: [], approaches: [] };
+    for (const o of legs) {
+      let dProp = 0; for (const q of n.out) if (q !== o && Math.abs(q.dx * o.dx + q.dz * o.dz) < 0.1) dProp = Math.max(dProp, q.e.p.width / 2);
+      j.legs.push({ o, u: v(o.dx, o.dz), e: o.e, prof: o.e.p, dProp, axis: Math.abs(o.dx) > Math.abs(o.dz) ? 'x' : 'z' });
+    }
+    n.junction = j; L.junctions.push(j);
+  }
+  L.runs = [];
+  for (const e of G.edges) {
+    if (e.p.alley || e.a.pass) continue;
+    const chain = [e]; let node = e.b;
+    while (node.pass) { const nx = node.out.find(o => o.fwd && !o.e.p.alley && o.e !== chain[chain.length - 1]); if (!nx) throw new Error('run orientation broken at ' + node.id); chain.push(nx.e); node = nx.e.b; }
+    const j0 = e.a.junction, j1 = node.junction, u = v(e.dx, e.dz);
+    const run = { id: 'R' + L.runs.length, p: e.p, u, r: vrot(u), start: v(e.a.x, e.a.z), len: vlen(vsub(v(node.x, node.z), v(e.a.x, e.a.z))), j0, j1, edges: chain,
+      dProp0: j0.legs.find(l => l.e === e).dProp, dProp1: j1.legs.find(l => l.e === chain[chain.length - 1]).dProp };
+    run.cw0 = run.dProp0 + 4; run.cw1 = run.len - run.dProp1 - 4;   // crosswalks occupy [dProp, dProp+4] from each junction
+    run.m0 = run.cw0 + 1.4; run.m1 = run.cw1 - 1.4;                     // stop bars 1.0 m beyond the crosswalk, 0.40 thick
+    L.runs.push(run);
+  }
+  return L;
+}
+const polyBounds = poly => { const b = { x0: Infinity, z0: Infinity, x1: -Infinity, z1: -Infinity }; for (const p of poly) { b.x0 = Math.min(b.x0, p.x); b.z0 = Math.min(b.z0, p.z); b.x1 = Math.max(b.x1, p.x); b.z1 = Math.max(b.z1, p.z); } return b; };
+
+// ---------- generation passes (all placement goes through place()) ----------
+function genDistrict(W) {
+  const L = W.layout = analyseLayout(W.graphDef), R = W.rng.world;
+  const ob = W.bounds = polyBounds(L.outer.poly);
+  place('GEN_RoadSurface', { x0: ob.x0 - 0.3, z0: ob.z0 - 0.3, x1: ob.x1 + 0.3, z1: ob.z1 + 0.3 }, 0, 0, 0, 0, { flat: true });
+  W.surface.fillRect(v(ob.x0, ob.z0), v(1, 0), v(0, 1), ob.x1 - ob.x0, ob.z1 - ob.z0, 1);
+  for (const b of L.blocks) { const bb = polyBounds(b.poly); W.surface.fillRect(v(bb.x0, bb.z0), v(1, 0), v(0, 1), bb.x1 - bb.x0, bb.z1 - bb.z0, 0); place('GEN_Slab', { x0: bb.x0, z0: bb.z0, x1: bb.x1, z1: bb.z1, y0: Y_ROAD, y1: 0, mat: 'Concrete' }, 0, 0, 0, 0, { flat: true }); }
+  genCrossings(W, L);
+  for (const b of L.blocks) genSidewalks(W, b);
+  genSidewalks(W, L.outer);
+  for (const r of L.runs) genRun(W, r);
+  genAlleys(W, L);
+  for (const b of L.blocks) genBlockBuildings(W, b, R);
+  genOuterRows(W, L.outer, R);
+  for (const j of L.junctions) genJunctionHardware(W, j);
+  for (const b of [...L.blocks, L.outer]) genFurniture(W, b, R);
+  genParked(W, L, R);
+}
+
+// crosswalks at every junction leg, ramps at both ends (04A: bars 0.60 with 0.60 gaps, 4.00 long)
+function genCrossings(W, L) {
+  W.rampReq = [];
+  for (const j of L.junctions) for (const leg of j.legs) {
+    const p = leg.prof, rE = vrot(v(leg.e.dx, leg.e.dz)), c = vadd(j.p, vmul(leg.u, leg.dProp + 2));
+    const span = p.curbR - p.curbL, nb = Math.floor((span + 0.6) / 1.2), first = (p.curbL + p.curbR) / 2 - (nb - 1) * 0.6;
+    for (let k = 0; k < nb; k++) { const q = vadd(c, vmul(rE, first + k * 1.2)); place('MK_CrosswalkBar', {}, q.x, Y_ROAD + MARK_Y, q.z, yawOf(leg.u), { flat: true }); }
+    const a = vadd(c, vmul(rE, p.curbL)), b = vadd(c, vmul(rE, p.curbR));
+    W.rampReq.push(a, b);
+    j.crossings.push({ c, u: leg.u, rE, a, b, leg, axis: leg.axis, walk: false });
+  }
+}
+// sidewalk strips with ramp cut-outs + corner pieces (4 m curb returns on block corners)
+function genSidewalks(W, blk) {
+  const n = blk.sides.length, convexR = 4;
+  for (let i = 0; i < n; i++) {
+    const s = blk.sides[i]; if (s.walk <= 0) continue;
+    const prev = blk.sides[(i - 1 + n) % n], next = blk.sides[(i + 1) % n];
+    const t0 = blk.turn[i] < -1e-6 ? prev.walk : 0, t1 = blk.turn[(i + 1) % n] < -1e-6 ? next.walk : 0;
+    s.t0 = t0; s.t1 = t1;
+    const len = s.len - t0 - t1; if (len < 0.05) continue;
+    const ramps = [];
+    for (const q of W.rampReq) { const rel = vsub(q, s.a), ss = vdot(rel, s.d), tt = vdot(rel, s.nOut); if (Math.abs(tt - s.walk) < 0.6 && ss > t0 + 1.05 && ss < s.len - t1 - 1.05) ramps.push(ss); }
+    const origin = vat(s.a, s.d, s.len - t1, s.nOut, 0);  // strip local X runs along -d (facade direction)
+    place('GEN_SidewalkStrip', { len, width: s.walk, ramps: ramps.map(ss => s.len - t1 - ss) }, origin.x, 0, origin.z, yawOf(s.nOut), { flat: true });
+    W.surface.fillRect(vat(s.a, s.d, t0, s.nOut, 0), s.d, s.nOut, len, s.walk, 2);
+    for (const ss of ramps) {
+      const q = vat(s.a, s.d, ss, s.nOut, s.walk); s.ramps.push(ss);
+      place('ST_CurbRamp', {}, q.x, 0, q.z, yawOf(s.nOut), { flat: true });
+      W.surface.addRamp(q, s.nOut, 1.0, 1.8, Y_ROAD, 0, vmul(s.d, 1));
+    }
+    // corner piece at vertex i (between prev and s)
+    if (prev.walk > 0 && Math.abs(blk.turn[i]) > 1e-6) {
+      const P = blk.poly[i], convex = blk.turn[i] > 0, r = convex ? convexR : 0;
+      let n1 = prev.nOut, n2 = s.nOut, wa = prev.walk, wb = s.walk;
+      if (vlen(vsub(vrot(n1), n2)) > 1e-3) { n1 = s.nOut; n2 = prev.nOut; wa = s.walk; wb = prev.walk; }
+      place('GEN_SidewalkCorner', { wa, wb, r }, P.x, 0, P.z, yawX(n1), { flat: true });
+      W.surface.fillCorner(P, n1, n2, wa, wb, r, 2);
+    }
+  }
+}
+// lane markings + traffic lanes + parking slots for one straight run between junctions
+function genRun(W, r) {
+  const p = r.p, u = r.u, R = r.r, rot = yawOf(u), { cw0, cw1, m0, m1 } = r;
+  const at = (s, o) => vat(r.start, u, s, R, o);
+  const mk = (id, prm, s, o, yaw = rot) => { const q = at(s, o); place(id, prm, q.x, Y_ROAD + MARK_Y, q.z, yaw, { flat: true }); };
+  if (p.center === 'double') mk('MK_DoubleYellow', { len: m1 - m0 }, (m0 + m1) / 2, 0);
+  else if (p.center === 'dashed') for (let s = m0 + 1.5; s + 1.5 <= m1; s += 12) mk('MK_CenterDash', {}, s, 0);
+  for (const b of p.bands) {
+    if (b.type === 'parking') { mk('MK_ParkingLine', { len: m1 - m0 }, (m0 + m1) / 2, b.o1); W.parkingSlots.push({ run: r, band: b, s0: cw0 + 4, s1: cw1 - 4 }); }
+    if (b.type === 'buffer') {
+      mk('MK_EdgeLine', { len: m1 - m0 }, (m0 + m1) / 2, b.o0 + 0.05); mk('MK_EdgeLine', { len: m1 - m0 }, (m0 + m1) / 2, b.o1 - 0.05);
+      if (b.w >= 1) for (let s = m0 + 2; s < m1 - 1; s += 3) mk('MK_BufferHatch', { w: b.w - 0.2 }, s, b.oc);
+    }
+    if (b.type === 'bike') {
+      mk('MK_BikeLane', { len: cw1 - cw0 }, (cw0 + cw1) / 2, b.oc);
+      const yaw = b.dir > 0 ? rot : rot + Math.PI;
+      for (let k = 0; cw0 + 4 + k * 36 < cw1 - 5; k++) { const s = cw0 + 4 + k * 36; const sa = b.dir > 0 ? s : cw1 - (s - cw0); mk('MK_BikeStencil', {}, sa, b.oc, yaw); mk('MK_Arrow', {}, sa + (b.dir > 0 ? 2.6 : -2.6), b.oc, yaw); }
+      W.lanes.push(makeLane(W, r, b, 'bike'));
+    }
+    if (b.type === 'travel') {
+      const lane = makeLane(W, r, b, 'travel'); W.lanes.push(lane);
+      mk('MK_StopBar', {}, b.dir > 0 ? cw1 - 1.2 : cw0 + 1.2, b.oc);
+      for (let s = cw0 + 18 + (lane.id % 3) * 7; s < cw1 - 8; s += 46) { const q = at(s, b.oc + 0.4); place('ST_Manhole', {}, q.x, Y_ROAD + 0.003, q.z, 0, { flat: true }); W.manholes.push({ x: q.x, z: q.z, lane }); }
+    }
+  }
+}
+function makeLane(W, r, b, type) {
+  const fwd = b.dir > 0, at = (s) => vat(r.start, r.u, s, r.r, b.oc);
+  const s0 = fwd ? r.cw0 : r.cw1, s1 = fwd ? r.cw1 - 1.4 : r.cw0 + 1.4;
+  const a = at(s0), e = at(type === 'bike' ? (fwd ? r.cw1 : r.cw0) : s1);
+  const lane = { id: W.lanes.length, type, run: r, band: b, a, b: e, d: fwd ? r.u : vmul(r.u, -1), startJ: fwd ? r.j0 : r.j1, endJ: fwd ? r.j1 : r.j0, len: vlen(vsub(e, a)), conns: [] };
+  lane.pts = [a, e]; lane.cum = [0, lane.len]; lane.axis = Math.abs(r.u.x) > Math.abs(r.u.z) ? 'x' : 'z';
+  return lane;
+}
+function genAlleys(W, L) {
+  for (const e of L.G.edges) {
+    if (!e.p.alley) continue;
+    const d = v(e.dx, e.dz), r = vrot(d), hwA = e.a.out.filter(o => !o.e.p.alley)[0].e.p, hwB = e.b.out.filter(o => !o.e.p.alley)[0].e.p;
+    const sA = hwA.width / 2, sB = e.len - hwB.width / 2, A = v(e.a.x, e.a.z);
+    const c0 = vat(A, d, sA, r, -4), c1 = vat(A, d, sB, r, 4);
+    place('GEN_Slab', { x0: Math.min(c0.x, c1.x), z0: Math.min(c0.z, c1.z), x1: Math.max(c0.x, c1.x), z1: Math.max(c0.z, c1.z), y0: Y_ROAD, y1: Y_ALLEY, mat: 'AlleyConc' }, 0, 0, 0, 0, { flat: true });
+    W.surface.fillRect(vat(A, d, sA, r, -4), d, r, sB - sA, 8, 4);
+    // aprons across the street sidewalks at both mouths (driveway: ramps up from the curb line)
+    for (const [s0, s1, out] of [[sA - Math.max(hwA.walkL, hwA.walkR), sA, vmul(d, -1)], [sB, sB + Math.max(hwB.walkL, hwB.walkR), d]]) {
+      const q0 = vat(A, d, s0, r, -4), q1 = vat(A, d, s1, r, 4);
+      place('GEN_Slab', { x0: Math.min(q0.x, q1.x), z0: Math.min(q0.z, q1.z), x1: Math.max(q0.x, q1.x), z1: Math.max(q0.z, q1.z), y0: Y_ROAD, y1: Y_ALLEY, mat: 'AlleyConc' }, 0, 0, 0, 0, { flat: true });
+      W.surface.fillRect(vat(A, d, s0, r, -4), d, r, s1 - s0, 8, 4);
+      const curbPt = vat(A, d, out === d ? s1 : s0, r, 0);
+      W.surface.addRamp(curbPt, out, 4.0, 1.2, Y_ROAD, Y_ALLEY, r);
+    }
+    W.alleys.push({ a: vat(A, d, sA, r, 0), b: vat(A, d, sB, r, 0), d, r });
+    // dressing: dumpsters and bags against the walls
+    for (const [s, side] of [[sA + 9, 1], [sA + 23, -1], [sB - 12, 1]]) { const q = vat(A, d, s, r, side * 3.3); place('ST_Dumpster', {}, q.x, Y_ALLEY, q.z, yawOf(vmul(r, -side))); }
+    { const q = vat(A, d, sA + 30, r, -3.4); place('ST_TrashBags', {}, q.x, Y_ALLEY, q.z, yawOf(r)); }
+  }
+}
+
+// ---------- buildings ----------
+const STOREYS = { avenue: [4, 6], street: [3, 5], side: [2, 4], alley: [3, 4] };
+function splitFrontage(F, R) { const out = []; let rem = F; while (rem >= 24) { const w = R.pick([8, 12, 12, 16]); out.push(w); rem -= w; } if (rem >= 16 && R.chance(0.5)) { const w = 8; out.push(w); rem -= w; } if (rem > 0.01) { if (rem < 6 && out.length) out[out.length - 1] += rem; else out.push(rem); } return out; }
+function genBlockBuildings(W, blk, R) {
+  const n = blk.sides.length; if (n !== 4) return;
+  const depth = blk.sides.map(s => (s.prof.name === 'avenue' ? 16 : 12));
+  const blds = [];
+  for (let i = 0; i < n; i++) {
+    const s = blk.sides[i], prev = blk.sides[(i - 1 + n) % n], dPrev = depth[(i - 1 + n) % n], dNext = depth[(i + 1) % n];
+    const st = [Math.max(STOREYS[s.prof.name][0], STOREYS[prev.prof.name][0]), Math.max(STOREYS[s.prof.name][1], STOREYS[prev.prof.name][1])];
+    blds.push({ blk, O: s.a, U: s.d, V: s.nIn, lu: dPrev, lv: depth[i], storeys: R.int(st[0], st[1]), corner: true,
+      facades: [{ side: s, s0: 0, s1: dPrev }, { side: prev, s0: prev.len - depth[i], s1: prev.len }] });
+    let a = dPrev; for (const w of splitFrontage(s.len - dPrev - dNext, R)) {
+      blds.push({ blk, O: vat(s.a, s.d, a, s.nIn, 0), U: s.d, V: s.nIn, lu: w, lv: depth[i], storeys: R.int(...STOREYS[s.prof.name]), facades: [{ side: s, s0: a, s1: a + w }] });
+      a += w;
+    }
+  }
+  // one enterable delivery building per block: a mid building on a non-avenue street side
+  const cands = blds.filter(b => !b.corner && !b.facades[0].side.prof.alley && b.facades[0].side.prof.name !== 'avenue' && b.lu >= 8);
+  if (cands.length) { const d = R.pick(cands); d.delivery = true; d.storeys = R.int(4, 6); }
+  const rcands = blds.filter(b => !b.corner && !b.delivery && !b.facades[0].side.prof.alley && b.facades[0].side.prof.name !== 'side' && b.lu >= 8);
+  if (rcands.length) R.pick(rcands).restaurant = true;
+  for (const b of blds) buildBuilding(W, b, R);
+  // outer corner columns + corner cornice blocks
+  for (let i = 0; i < n; i++) {
+    const s = blk.sides[i], prev = blk.sides[(i - 1 + n) % n], P = blk.poly[i];
+    const corner = blds.find(b => b.corner && b.O === s.a); if (!corner) continue;
+    const c = vadd(P, vmul(vadd(prev.nOut, s.nOut), -0.15));
+    place('BK_C_Column', { h: corner.deck }, c.x, 0, c.z, yawOf(s.nOut));
+    let n1 = prev.nOut, n2 = s.nOut; if (vlen(vsub(vrot(n1), n2)) > 1e-3) { n1 = s.nOut; n2 = prev.nOut; }
+    place('BK_T_CorniceCorner', {}, P.x, corner.deck - 0.2, P.z, yawX(n1));
+  }
+  W.buildings.push(...blds);
+}
+function buildBuilding(W, b, R) {
+  b.deck = FLOOR_G + FLOOR_U * (b.storeys - 1);
+  b.id = 'BLD' + W.buildings.length + '_' + Math.round(b.O.x) + '_' + Math.round(b.O.z) + '_' + Math.round(b.lu);
+  const c = vat(b.O, b.U, b.lu / 2, b.V, b.lv / 2); b.c = c;
+  // mass (axis-aligned), inset 0.28 behind facade modules
+  const corners = [b.O, vat(b.O, b.U, b.lu, b.V, 0), vat(b.O, b.U, b.lu, b.V, b.lv), vat(b.O, b.U, 0, b.V, b.lv)];
+  const bb = polyBounds(corners); const mb = { ...bb };
+  for (const f of b.facades) { const no = f.side.nOut; if (no.x > 0.5) mb.x1 -= 0.28; if (no.x < -0.5) mb.x0 += 0.28; if (no.z > 0.5) mb.z1 -= 0.28; if (no.z < -0.5) mb.z0 += 0.28; }
+  place('GEN_BuildingMass', { x0: mb.x0, z0: mb.z0, x1: mb.x1, z1: mb.z1, y: b.deck }, 0, 0, 0, 0);
+  place('GEN_RoofDeck', { x0: mb.x0, z0: mb.z0, x1: mb.x1, z1: mb.z1, y: b.deck }, 0, 0, 0, 0);
+  addCollider((bb.x0 + bb.x1) / 2, (bb.z0 + bb.z1) / 2, (bb.x1 - bb.x0) / 2, (bb.z1 - bb.z0) / 2, 0, 0, b.deck, 'building', b);
+  b.bounds = bb;
+  const style = R.pick(['single', 'single', 'pair']);
+  b.facades.forEach((f, fi) => buildFacade(W, b, f, style, R, fi));
+  roofProps(W, b, mb, R);
+}
+function groundPick(kind, R) {
+  if (kind === 'commercial') return R.weighted(['BK_G_Storefront', 'BK_G_StorefrontDoor', 'BK_G_Shutter', 'BK_G_Plain', 'BK_G_DeliveryDoor'], id => ({ BK_G_Storefront: 3, BK_G_StorefrontDoor: 3, BK_G_Shutter: 1.2, BK_G_Plain: 0.6, BK_G_DeliveryDoor: 0.6 })[id]);
+  return R.weighted(['BK_G_Plain', 'BK_G_Storefront', 'BK_G_Shutter', 'BK_G_DeliveryDoor'], id => ({ BK_G_Plain: 2, BK_G_Storefront: 1, BK_G_Shutter: 0.8, BK_G_DeliveryDoor: 0.5 })[id]);
+}
+function buildFacade(W, b, f, style, R, fi) {
+  const side = f.side, L = f.s1 - f.s0, dF = vmul(side.d, -1), nOut = side.nOut, yaw = yawOf(nOut);
+  const left = vat(side.a, side.d, f.s1, side.nOut, 0);
+  const rear = side.prof.alley;
+  const kind = rear ? 'rear' : side.prof.name === 'avenue' || (side.prof.name === 'street' && R.chance(0.5)) || b.restaurant ? 'commercial' : 'residential';
+  const widths = []; let rem = L; while (rem >= 4 - 1e-6) { widths.push(4); rem -= 4; } if (rem > 1.5) { widths.push(2); rem -= 2; } if (rem > 0.5) { widths.push(1); rem -= 1; }
+  const nb = widths.filter(w => w === 4).length, mid = Math.floor((nb - 1) / 2);
+  let x = 0, bayIdx = 0; const bays = [];
+  for (const w of widths) {
+    const o = vat(left, dF, x, nOut, 0), full = w === 4;
+    let gid;
+    if (!full) gid = rear ? 'BK_G_Filler' + w : 'BK_G_Filler' + w;
+    else if (rear) gid = bayIdx === mid ? 'BK_R_Door' : 'BK_G_Plain';
+    else if (b.delivery && fi === 0 && bayIdx === mid) gid = 'BK_G_DoorResidential';
+    else if (b.restaurant && fi === 0 && bayIdx === mid) gid = 'BK_G_Restaurant';
+    else if (kind === 'residential' && bayIdx === mid && fi === 0) gid = 'BK_G_DoorResidential';
+    else gid = groundPick(kind, R);
+    const { g } = place(gid, {}, o.x, 0, o.z, yaw);
+    const sock = MODULES[gid].sockets;
+    if (sock) for (const [sn, sd] of Object.entries(sock)) {
+      const at = vat(o, dF, sd.pos[0], nOut, sd.pos[2]), ap = vat(o, dF, sd.approach[0], nOut, sd.approach[2]);
+      const rec = { kind: sn, module: gid, building: b, p: at, approach: ap, nOut, dF };
+      side.doors.push(vdot(vsub(at, side.a), side.d));
+      if (gid === 'BK_G_DoorResidential' && b.delivery && !b.entrance) { b.entrance = rec; W.deliveryBuildings.push(b); }
+      if (gid === 'BK_G_Restaurant') { b.pickup = rec; W.restaurants.push(rec); }
+      if (gid === 'BK_G_DoorResidential') { const l = vat(o, dF, 3.0, nOut, 0); place('RF_WallLamp', {}, l.x, 2.35, l.z, yaw); }
+    }
+    if (full && !rear && (gid === 'BK_G_Storefront' || gid === 'BK_G_StorefrontDoor') && R.chance(0.22)) { const q = vat(o, dF, 3.85, nOut, 0); place('RF_BladeSign', {}, q.x, 3.05, q.z, yaw); }
+    for (let fl = 1; fl < b.storeys; fl++) {
+      const y = FLOOR_G + FLOOR_U * (fl - 1);
+      let uid = !full ? 'BK_U_Filler' + w : rear ? (R.chance(0.6) ? 'BK_R_Window' : 'BK_R_Plain') : style === 'pair' ? 'BK_U_WindowPair' : R.chance(0.25) ? 'BK_U_WindowAC' : R.chance(0.08) ? 'BK_U_Plain' : 'BK_U_Window';
+      place(uid, {}, o.x, y, o.z, yaw);
+      if (uid === 'BK_U_Window' && R.chance(0.22)) { const q = vat(o, dF, 1.35, nOut, 0); place('RF_FlowerBox', {}, q.x, y + 0.47, q.z, yaw); }
+    }
+    if (!rear) { place('BK_T_Cornice' + w, {}, o.x, b.deck - 0.2, o.z, yaw); }
+    place('BK_T_Parapet' + w, {}, o.x, b.deck, o.z, yaw);
+    bays.push({ x, w, gid }); x += w; if (full) bayIdx++;
+  }
+  // parapet posts at both ends, downspout at the left end
+  for (const t of [0, L]) { const q = vat(left, dF, t, nOut, -0.15); place('BK_T_ParapetPost', {}, q.x, b.deck, q.z, yaw); }
+  if (!rear && L >= 8) { const q = vat(left, dF, 0.35, nOut, 0); place('RF_Downspout4', {}, q.x, 0, q.z, yaw); for (let fl = 1; fl < b.storeys; fl++) place('RF_Downspout3', {}, q.x, FLOOR_G + FLOOR_U * (fl - 1), q.z, yaw); }
+  // seam to the previous building along this side
+  if (f.s0 > 0.01 && f.s1 < side.len - 0.01 && !b.corner) { const q = vat(side.a, side.d, f.s0, nOut, 0); const o = vadd(q, vmul(dF, -0.075)); place('BK_C_Seam', { h: Math.min(b.deck, 13) }, o.x, 0, o.z, yaw); }
+  // fire escape on some street / side facades
+  if (!rear && !b.delivery && side.prof.name !== 'avenue' && b.storeys >= 3 && R.chance(0.4)) {
+    const free = bays.filter(bb => bb.w === 4 && bb.gid !== 'BK_G_DoorResidential' && bb.gid !== 'BK_G_Restaurant');
+    if (free.length) {
+      const bay = R.pick(free), wide = free.find(bb => Math.abs(bb.x - bay.x - 4) < 0.01) && R.chance(0.35);
+      const o = vat(left, dF, bay.x, nOut, 0);
+      for (let fl = 1; fl < b.storeys; fl++) place(wide ? 'BK_FE_Platform8' : 'BK_FE_Platform4W', {}, o.x, FLOOR_G + FLOOR_U * (fl - 1), o.z, yaw);
+      const q = vat(o, dF, 3.3, nOut, 0); place('BK_FE_Bottom', {}, q.x, FLOOR_G, q.z, yaw);
+      const t = vat(o, dF, 0.2, nOut, 0); place('BK_FE_Top', {}, t.x, FLOOR_G + FLOOR_U * (b.storeys - 2), t.z, yaw);
+    }
+  }
+}
+function roofProps(W, b, mb, R) {
+  const x0 = mb.x0 + 0.9, z0 = mb.z0 + 0.9, x1 = mb.x1 - 0.9, z1 = mb.z1 - 0.9, taken = [];
+  const tryPlace = (id, n) => {
+    const def = MODULES[id];
+    for (let k = 0; k < n; k++) for (let t = 0; t < 12; t++) {
+      const rot = R.pick([0, Math.PI / 2]), hw = (rot ? def.d : def.w) / 2 + 0.3, hd = (rot ? def.w : def.d) / 2 + 0.3;
+      if (x1 - x0 < hw * 2 || z1 - z0 < hd * 2) return;
+      const x = R.range(x0 + hw, x1 - hw), z = R.range(z0 + hd, z1 - hd);
+      if (taken.some(q => Math.abs(q.x - x) < q.hw + hw && Math.abs(q.z - z) < q.hd + hd)) continue;
+      taken.push({ x, z, hw, hd }); place(id, {}, x, b.deck + 0.02, z, rot, { noCollide: true }); break;
+    }
+  };
+  if (b.storeys >= 4 && R.chance(0.4)) tryPlace('RF_WaterTower', 1);
+  tryPlace('RF_StairBulkhead', 1); tryPlace('RF_ACUnit', R.int(1, 3)); tryPlace('RF_Vent', R.int(1, 2)); tryPlace('RF_Chimney', R.int(0, 2));
+  if (R.chance(0.4)) tryPlace('RF_Skylight', 1); if (R.chance(0.4)) tryPlace('RF_Hatch', 1); if (R.chance(0.35)) tryPlace('RF_SatelliteDish', 1);
+}
+// edge rows: single-loaded buildings facing the district across the outer streets; the park takes the north side
+function genOuterRows(W, out, R) {
+  const n = out.sides.length;
+  out.sides.forEach((s, i) => {
+    if (s.walk <= 0) return;
+    if (s.nIn.z < -0.9) { genPark(W, s, R); s.park = true; return; }
+    const depth = s.prof.name === 'avenue' ? 16 : 12; let a = 0;
+    for (const w of splitFrontage(s.len, R)) {
+      const b = { blk: out, O: vat(s.a, s.d, a, s.nIn, 0), U: s.d, V: s.nIn, lu: w, lv: depth, storeys: R.int(3, 6), facades: [{ side: s, s0: a, s1: a + w }], outer: true };
+      if (s.prof.name === 'avenue' && !W.outerRestaurant && a > s.len * 0.4) { b.restaurant = true; W.outerRestaurant = true; }
+      buildBuilding(W, b, R); W.buildings.push(b); a += w;
+    }
+  });
+  // close concave outer corners with a plain mass
+  out.sides.forEach((s, i) => {
+    const prev = out.sides[(i - 1 + n) % n]; if (out.turn[i] >= -1e-6 || prev.park || s.park) return;
+    const P = out.poly[i], dA = prev.prof.name === 'avenue' ? 16 : 12, dB = s.prof.name === 'avenue' ? 16 : 12;
+    const bb = polyBounds([P, vadd(P, vmul(prev.nIn, dA)), vadd(P, vmul(s.nIn, dB)), vadd(vadd(P, vmul(prev.nIn, dA)), vmul(s.nIn, dB))]);
+    place('GEN_BuildingMass', { x0: bb.x0, z0: bb.z0, x1: bb.x1, z1: bb.z1, y: 13 }, 0, 0, 0, 0);
+    place('GEN_RoofDeck', { x0: bb.x0, z0: bb.z0, x1: bb.x1, z1: bb.z1, y: 13 }, 0, 0, 0, 0);
+  });
+}
+function genPark(W, s, R) {
+  const far = vat(s.a, s.d, 0, s.nIn, 46), bb = polyBounds([vat(s.a, s.d, -40, s.nIn, 0), vat(s.a, s.d, s.len + 40, s.nIn, 46)]);
+  place('GEN_Slab', { x0: bb.x0, z0: bb.z0, x1: bb.x1, z1: bb.z1, y0: Y_ROAD, y1: 0, mat: 'Lawn' }, 0, 0, 0, 0, { flat: true });
+  const yaw = yawOf(s.nOut);
+  for (let t = 0; t + 2 <= s.len + 1e-6; t += 2) { const q = vat(s.a, s.d, s.len - t, s.nOut, 0); place('ST_ParkFence', {}, q.x, 0, q.z, yaw); }
+  for (let t = 6; t < s.len - 4; t += 11) for (const dep of [5, 13, 24]) { const q = vat(s.a, s.d, t + R.range(-2, 2) + (dep === 13 ? 5 : 0), s.nIn, dep + R.range(-1, 1)); place('ST_Tree', { h: R.range(6, 8) }, q.x, 0, q.z, R.range(0, 6)); }
+  for (let t = 15; t < s.len - 4; t += 30) { const q = vat(s.a, s.d, t, s.nIn, 2.2); place('ST_Bench', {}, q.x, 0, q.z, yaw); const l = vat(s.a, s.d, t + 7, s.nIn, 1.2); place('ST_LampPost', {}, l.x, 0, l.z, 0); }
+}
+// signals, ped signals, stop signs, street signs
+function genJunctionHardware(W, j) {
+  const incoming = W.lanes.filter(l => l.type === 'travel' && l.endJ === j);
+  for (const l of incoming) {
+    const r = l.run, p = r.p, fwd = l.band.dir > 0, s = fwd ? r.cw1 - 0.6 : r.cw0 + 0.6, off = fwd ? p.curbR + 0.7 : p.curbL - 0.7;
+    const pole = vat(r.start, r.u, s, r.r, off), face = vmul(l.d, -1);
+    if (j.signal) {
+      const { g } = place('ST_TrafficSignal', { h: 4.6, arm: -Math.abs(off - l.band.oc) }, pole.x, 0, pole.z, yawOf(face));
+      for (const lp of g.userData.lamps) W.signalLamps.push({ j, axis: l.axis, kind: lp.kind, p: new THREE.Vector3(...lp.pos).applyMatrix4(g.matrixWorld), yaw: yawOf(face) });
+      j.approaches.push(l);
+    } else { place('ST_StopSign', {}, pole.x, 0, pole.z, yawOf(face)); }
+  }
+  if (j.signal) for (const c of j.crossings) for (const [end, sgn] of [[c.a, 1], [c.b, -1]]) {
+    const back = vmul(c.rE, -sgn), q = vadd(vadd(end, vmul(back, 1.0)), vmul(c.u, 2.6));
+    const { g } = place('ST_PedSignal', {}, q.x, 0, q.z, yawOf(vmul(back, -1)));
+    for (const lp of g.userData.lamps) W.signalLamps.push({ j, axis: c.axis, kind: lp.kind, ped: true, p: new THREE.Vector3(...lp.pos).applyMatrix4(g.matrixWorld), yaw: yawOf(vmul(back, -1)) });
+  }
+}
+// furniture zone (FZ 1.20 at the curb) and frontage zone (0.50 at the facade) per 04A
+function genFurniture(W, blk, R) {
+  blk.sides.forEach((s, si) => {
+    if (s.walk < 3.5 || s.park) return;
+    const fz = s.walk - CURB_W - 0.6, t0 = (s.t0 || 0) + 8, t1 = s.len - (s.t1 || 0) - 8, yaw = yawOf(s.nOut);
+    const near = (t, list, d) => list.some(x => Math.abs(x - t) < d);
+    let k = 0, hydrant = false;
+    const isAvenue = s.prof.name === 'avenue', outerAve = isAvenue && blk.id === 'OUT';
+    let shelterAt = outerAve && !W.busShelter ? s.len / 2 : -99, cartAt = isAvenue && !outerAve && !W.hotdog ? t0 + 6 : -99;
+    for (let t = t0; t <= t1; t += 6, k++) {
+      if (near(t, s.doors, 2.6) || near(t, s.ramps, 3)) continue;
+      const q = vat(s.a, s.d, t, s.nOut, fz);
+      if (Math.abs(t - shelterAt) < 6) { if (!W.busShelter) { const qs = vat(s.a, s.d, shelterAt, s.nOut, fz - 0.15); place('ST_BusShelter', {}, qs.x, 0, qs.z, yawOf(s.nIn)); W.busShelter = qs; } continue; }
+      if (Math.abs(t - cartAt) < 3 && !W.hotdog) { place('ST_HotDogCart', {}, q.x, 0, q.z, yaw + Math.PI / 2); W.hotdog = q; continue; }
+      const slot = k % 4;
+      if (slot === 0) { place('ST_TreePit', {}, q.x, 0.001, q.z, yaw, { flat: true }); place('ST_Tree', { h: R.range(6, 8) }, q.x, 0, q.z, R.range(0, 6)); }
+      else if (slot === 2) place('ST_LampPost', {}, q.x, 0, q.z, 0);
+      else {
+        let id = null;
+        if (!hydrant && t > s.len * 0.3) { id = 'ST_Hydrant'; hydrant = true; W.hydrants.push(q); }
+        else id = R.weighted(['ST_TrashCan', 'ST_BikeRack', 'ST_NewsBox', 'ST_Bench', 'ST_FlexPost', null], x => ({ ST_TrashCan: 2, ST_BikeRack: 1.2, ST_NewsBox: 0.8, ST_Bench: isAvenue ? 1.2 : 0.2, ST_FlexPost: 0.4, null: 2 })[x]);
+        if (id) place(id, {}, q.x, 0, q.z, id === 'ST_Bench' ? yaw + Math.PI : yaw + (id === 'ST_BikeRack' ? Math.PI / 2 : 0));
+      }
+    }
+    // frontage zone: bags, planters, cellar hatches
+    for (let t = t0 - 4; t < t1 + 4; t += 4) {
+      if (near(t, s.doors, 2.2)) continue;
+      const roll = R.float();
+      if (roll < 0.07) { const q = vat(s.a, s.d, t, s.nOut, 0.75); place('ST_TrashBags', {}, q.x, 0, q.z, yaw); }
+      else if (roll < 0.12) { const q = vat(s.a, s.d, t, s.nOut, 0.62); place('ST_Planter', {}, q.x, 0, q.z, yaw); }
+      else if (roll < 0.16 && s.walk >= 4) { const q = vat(s.a, s.d, t, s.nOut, 1.4); const { g } = place('ST_CellarHatch', { open: 0 }, q.x, 0.003, q.z, yaw, { flat: true }); W.cellarHatches.push({ p: q, yaw, side: s }); }
+    }
+    // one sidewalk shed run on a street-side mid facade
+    if (!W.shed && s.prof.name === 'street' && blk.id !== 'OUT' && s.len > 60) {
+      const t = s.len * 0.55; if (!near(t, s.doors, 8)) { for (let k2 = 0; k2 < 3; k2++) { const q = vat(s.a, s.d, t + 6 - k2 * 4, s.nOut, 0); place('ST_SidewalkShed', {}, q.x, 0, q.z, yaw); } W.shed = vat(s.a, s.d, t, s.nOut, 1.2); }
+    }
+    // street sign at block corners
+    if (blk.id !== 'OUT' && blk.turn[si] > 0) { const prev = blk.sides[(si - 1 + blk.sides.length) % blk.sides.length]; if (prev.walk > 0) { const P = blk.poly[si]; const q = vadd(P, vmul(vadd(prev.nOut, s.nOut), 1.6)); place('ST_StreetSign', {}, q.x, 0, q.z, yaw); } }
+  });
+}
+const PARKED_TYPES = [['VEH_Hatchback', 3], ['VEH_Taxi', 1.5], ['VEH_SUV', 2], ['VEH_Minivan', 2], ['VEH_DeliveryVan', 1], ['VEH_BoxTruck', 0.35]];
+function genParked(W, L, R) {
+  for (const ps of W.parkingSlots) {
+    const r = ps.run, b = ps.band, yawCar = yawOf(vmul(r.u, b.dir > 0 ? 1 : -1));
+    let s = ps.s0 + R.range(0, 3);
+    while (s < ps.s1 - 3) {
+      const [id] = R.weighted(PARKED_TYPES, x => x[1]), def = MODULES[id], len = def.d;
+      const sc = s + len / 2, q = vat(r.start, r.u, sc, r.r, b.oc + (b.o0 < 0 ? -0.15 : 0.15));
+      if (sc + len / 2 > ps.s1) break;
+      const nearHydrant = W.hydrants.some(h => Math.hypot(h.x - q.x, h.z - q.z) < 4.5);
+      if (!nearHydrant && R.chance(0.78)) {
+        place(id, {}, q.x, Y_ROAD, q.z, yawCar);
+        const fwdCar = vmul(r.u, b.dir > 0 ? 1 : -1);
+        W.parked.push({ id, p: q, yaw: yawCar, len, w: def.w, run: r, band: b, fwd: fwdCar, doorSide: vmul(vrot(fwdCar), -1) }); // driver door: car's left
+      }
+      s += len + R.range(1.2, 3.2);
+    }
+  }
+}
+
+// ===================================================================================
+// 5. WORLD BUILD — placement registry, static batching, colliders, ground surface raster
+// ===================================================================================
+let W = null; // the current world (host-owned state lives here, separate from players[])
+const _box3 = new THREE.Box3();
+function dimOf(dv, prm, key) { if (typeof dv === 'number') return dv; if (key === 'h' && prm.h !== undefined) return prm.h; if (key === 'd' && prm.len !== undefined) return prm.len; if (key === 'w' && prm.w !== undefined) return prm.w; return null; }
+function place(id, params, x, y, z, rotY = 0, opt = {}) {
+  const def = MODULES[id]; if (!def) throw new Error('Unknown module ' + id);
+  const prm = { ...(def.params || {}), ...(params || {}) };
+  const g = def.build(prm);
+  g.userData.moduleId = id;
+  _box3.setFromObject(g, false);
+  const rec = { id, x, y, z, rotY, prm, w: dimOf(def.w, prm, 'w'), h: dimOf(def.h, prm, 'h'), d: dimOf(def.d, prm, 'd'), spec: def.spec, sheet: def.sheet,
+    lmin: _box3.min.toArray(), lmax: _box3.max.toArray() };
+  g.position.set(x, y, z); g.rotation.y = rotY; g.updateMatrixWorld(true);
+  W.placements.push(rec);
+  if (opt.dynamic) { (opt.parent || W.dynamicRoot).add(g); rec.obj = g; }
+  else W.batcher.add(g, !opt.flat);
+  if (def.col && !opt.noCollide) for (const c of def.col) addColliderLocal(c, x, y, z, rotY, rec);
+  return { g, rec };
+}
+function addCollider(cx, cz, hx, hz, rot, y0, y1, kind, ref) {
+  const c = { cx, cz, hx, hz, ax: Math.cos(rot), az: -Math.sin(rot), y0, y1, kind, ref, r: Math.hypot(hx, hz), stamp: 0 };
+  W.colliders.push(c); W.grid.insert(c); return c;
+}
+function addColliderLocal(col, px, py, pz, rotY, ref) {
+  const lx = (col[0] + col[2]) / 2, lz = (col[1] + col[3]) / 2, c = Math.cos(rotY), s = Math.sin(rotY);
+  return addCollider(px + lx * c + lz * s, pz - lx * s + lz * c, Math.abs(col[2] - col[0]) / 2, Math.abs(col[3] - col[1]) / 2, rotY, py + col[4], py + col[5], 'static', ref);
+}
+class Grid {
+  constructor(x0, z0, x1, z1, cell = 8) { this.x0 = x0; this.z0 = z0; this.cell = cell; this.nx = Math.ceil((x1 - x0) / cell); this.nz = Math.ceil((z1 - z0) / cell); this.cells = new Array(this.nx * this.nz); this.stamp = 0; }
+  insert(c) {
+    const i0 = clamp(Math.floor((c.cx - c.r - this.x0) / this.cell), 0, this.nx - 1), i1 = clamp(Math.floor((c.cx + c.r - this.x0) / this.cell), 0, this.nx - 1);
+    const k0 = clamp(Math.floor((c.cz - c.r - this.z0) / this.cell), 0, this.nz - 1), k1 = clamp(Math.floor((c.cz + c.r - this.z0) / this.cell), 0, this.nz - 1);
+    for (let k = k0; k <= k1; k++) for (let i = i0; i <= i1; i++) (this.cells[k * this.nx + i] ||= []).push(c);
+  }
+  query(x, z, r, out) {
+    out.length = 0; const st = ++this.stamp;
+    const i0 = clamp(Math.floor((x - r - this.x0) / this.cell), 0, this.nx - 1), i1 = clamp(Math.floor((x + r - this.x0) / this.cell), 0, this.nx - 1);
+    const k0 = clamp(Math.floor((z - r - this.z0) / this.cell), 0, this.nz - 1), k1 = clamp(Math.floor((z + r - this.z0) / this.cell), 0, this.nz - 1);
+    for (let k = k0; k <= k1; k++) for (let i = i0; i <= i1; i++) { const cell = this.cells[k * this.nx + i]; if (cell) for (const c of cell) if (c.stamp !== st) { c.stamp = st; out.push(c); } }
+    return out;
+  }
+}
+// Ground raster (0.25 m): 0 blocked/lot (y 0), 1 asphalt (-0.15), 2 sidewalk (0), 3 ramp, 4 alley (-0.05)
+const SURF_Y = [0, Y_ROAD, Y_WALK, 0, Y_ALLEY];
+class Surface {
+  constructor(x0, z0, x1, z1, res = 0.25) { this.x0 = x0; this.z0 = z0; this.res = res; this.nx = Math.ceil((x1 - x0) / res); this.nz = Math.ceil((z1 - z0) / res); this.code = new Uint8Array(this.nx * this.nz); this.ri = new Int16Array(this.nx * this.nz).fill(-1); this.ramps = []; }
+  idx(x, z) { const i = Math.floor((x - this.x0) / this.res), k = Math.floor((z - this.z0) / this.res); return i < 0 || k < 0 || i >= this.nx || k >= this.nz ? -1 : k * this.nx + i; }
+  each(bb, fn) {
+    const i0 = clamp(Math.floor((bb.x0 - this.x0) / this.res), 0, this.nx - 1), i1 = clamp(Math.ceil((bb.x1 - this.x0) / this.res), 0, this.nx - 1);
+    const k0 = clamp(Math.floor((bb.z0 - this.z0) / this.res), 0, this.nz - 1), k1 = clamp(Math.ceil((bb.z1 - this.z0) / this.res), 0, this.nz - 1);
+    for (let k = k0; k <= k1; k++) for (let i = i0; i <= i1; i++) fn(k * this.nx + i, this.x0 + (i + 0.5) * this.res, this.z0 + (k + 0.5) * this.res);
+  }
+  fillRect(o, ux, uz, w, d, code, rampIdx = -1) {
+    const bb = polyBounds([o, vat(o, ux, w, uz, 0), vat(o, ux, 0, uz, d), vat(o, ux, w, uz, d)]);
+    this.each(bb, (ix, x, z) => { const rx = x - o.x, rz = z - o.z, a = rx * ux.x + rz * ux.z, b = rx * uz.x + rz * uz.z; if (a >= 0 && a <= w && b >= 0 && b <= d) { this.code[ix] = code; this.ri[ix] = rampIdx; } });
+  }
+  fillCorner(P, a, b, wa, wb, r, code) {
+    const bb = polyBounds([P, vat(P, a, wa, b, 0), vat(P, a, 0, b, wb), vat(P, a, wa, b, wb)]);
+    this.each(bb, (ix, x, z) => { const rx = x - P.x, rz = z - P.z, la = rx * a.x + rz * a.z, lb = rx * b.x + rz * b.z;
+      if (la < 0 || lb < 0 || la > wa || lb > wb) return;
+      if (r > 0 && la > wa - r && lb > wb - r && Math.hypot(la - (wa - r), lb - (wb - r)) > r) return;
+      this.code[ix] = code; this.ri[ix] = -1; });
+  }
+  // ramp: o on the low edge (curb line), n points from the ramp toward the road (down-slope), extends 'len' back from o, half-width 'half' along t
+  addRamp(o, n, half, len, h0, h1, t) {
+    const id = this.ramps.length; this.ramps.push({ o, n, len, h0, h1 });
+    this.fillRect(vat(o, t, -half, n, -len), t, n, half * 2, len, 3, id);
+  }
+  height(x, z) {
+    const ix = this.idx(x, z); if (ix < 0) return 0;
+    const c = this.code[ix]; if (c !== 3) return SURF_Y[c];
+    const r = this.ramps[this.ri[ix]]; const dd = -((x - r.o.x) * r.n.x + (z - r.o.z) * r.n.z);
+    return lerp(r.h0, r.h1, clamp(dd / r.len, 0, 1));
+  }
+  codeAt(x, z) { const ix = this.idx(x, z); return ix < 0 ? 0 : this.code[ix]; }
+}
+class Batcher {
+  constructor(cell = 64) { this.cell = cell; this.cells = new Map(); this.passthrough = []; }
+  add(root, cast = true) {
+    root.updateMatrixWorld(true);
+    root.traverse(o => {
+      if (!o.isMesh) return;
+      const mat = o.material;
+      if (mat.map || mat.transparent || !mat.isMeshLambertMaterial) { this.passthrough.push(o); return; }
+      const e = o.matrixWorld.elements, key = Math.floor(e[12] / this.cell) + ',' + Math.floor(e[14] / this.cell) + (cast ? 'c' : 'f');
+      let c = this.cells.get(key); if (!c) this.cells.set(key, c = { cast, items: [], nv: 0, ni: 0 });
+      const geo = o.geometry, nv = geo.attributes.position.count, ni = geo.index ? geo.index.count : nv;
+      c.items.push({ geo, m: o.matrixWorld.clone(), color: mat.color }); c.nv += nv; c.ni += ni;
+    });
+  }
+  build(parent, material) {
+    const nm = new THREE.Matrix3(), p = new THREE.Vector3(), nn = new THREE.Vector3(); let meshes = 0;
+    for (const c of this.cells.values()) {
+      const pos = new Float32Array(c.nv * 3), nor = new Float32Array(c.nv * 3), col = new Float32Array(c.nv * 3), idx = new Uint32Array(c.ni);
+      let vo = 0, io = 0;
+      for (const it of c.items) {
+        const P = it.geo.attributes.position, N = it.geo.attributes.normal, I = it.geo.index, me = it.m;
+        nm.getNormalMatrix(me);
+        for (let k = 0; k < P.count; k++) {
+          p.fromBufferAttribute(P, k).applyMatrix4(me); const o3 = (vo + k) * 3; pos[o3] = p.x; pos[o3 + 1] = p.y; pos[o3 + 2] = p.z;
+          if (N) { nn.fromBufferAttribute(N, k).applyMatrix3(nm).normalize(); nor[o3] = nn.x; nor[o3 + 1] = nn.y; nor[o3 + 2] = nn.z; }
+          col[o3] = it.color.r; col[o3 + 1] = it.color.g; col[o3 + 2] = it.color.b;
+        }
+        if (I) for (let k = 0; k < I.count; k++) idx[io + k] = I.getX(k) + vo; else for (let k = 0; k < P.count; k++) idx[io + k] = vo + k;
+        vo += P.count; io += I ? I.count : P.count;
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.BufferAttribute(pos, 3)); geo.setAttribute('normal', new THREE.BufferAttribute(nor, 3)); geo.setAttribute('color', new THREE.BufferAttribute(col, 3)); geo.setIndex(new THREE.BufferAttribute(idx, 1));
+      geo.computeBoundingSphere(); geo.computeBoundingBox();
+      const mesh = new THREE.Mesh(geo, material); mesh.castShadow = c.cast; mesh.receiveShadow = true; mesh.matrixAutoUpdate = false; parent.add(mesh); meshes++;
+    }
+    for (const o of this.passthrough) { const m = o.clone(); m.matrix.copy(o.matrixWorld); m.matrixAutoUpdate = false; parent.add(m); }
+    this.cells.clear(); this.passthrough = [];
+    return meshes;
+  }
+}
+const BATCH_MAT = new THREE.MeshLambertMaterial({ vertexColors: true, flatShading: true });
+// collapse a dynamic Group into one vertex-coloured mesh (used for traffic cars and props that move as one)
+function bakeGroup(group) {
+  const b = new Batcher(Infinity); const tmp = group.clone(); tmp.position.set(0, 0, 0); tmp.rotation.set(0, 0, 0); tmp.updateMatrixWorld(true); b.add(tmp, true);
+  const parent = G(); b.build(parent, BATCH_MAT); return parent.children[0].geometry;
+}
+
+function createWorld(seed, graphName = 'district') {
+  const scene = new THREE.Scene();
+  const sky = new THREE.Color(0xc3ccd2); scene.background = sky; scene.fog = new THREE.Fog(sky, 70, TUNING.drawDistance);
+  const hemi = new THREE.HemisphereLight(0xe8eef2, 0x6b6157, 1.35); scene.add(hemi);
+  const sun = new THREE.DirectionalLight(0xfff0d8, 2.1); sun.position.set(-50, 90, 35); sun.castShadow = true;
+  sun.shadow.mapSize.set(2048, 2048); Object.assign(sun.shadow.camera, { left: -55, right: 55, top: 55, bottom: -55, near: 1, far: 260 }); sun.shadow.bias = -0.0006; sun.shadow.normalBias = 0.02;
+  scene.add(sun); scene.add(sun.target);
+  const w = {
+    seed, graphDef: GRAPHS[graphName], rng: makeStreams(seed), scene, sun, hemi,
+    staticRoot: G(), dynamicRoot: G(), batcher: new Batcher(64), placements: [], colliders: [],
+    grid: new Grid(-60, -80, 420, 150, 8), surface: new Surface(-30, -25, 380, 120, 0.25),
+    lanes: [], parkingSlots: [], parked: [], buildings: [], deliveryBuildings: [], restaurants: [], hydrants: [], manholes: [], cellarHatches: [], alleys: [],
+    signalLamps: [], time: 0, traffic: null, peds: null, director: null, orders: null,
+  };
+  scene.add(w.staticRoot); scene.add(w.dynamicRoot);
+  W = w;
+  const t0 = performance.now();
+  genDistrict(w);
+  w.batchMeshes = w.batcher.build(w.staticRoot, BATCH_MAT);
+  w.genMs = performance.now() - t0;
+  return w;
+}
+
+// ===================================================================================
+// 6. BIKE — one kinematic body: position, heading, velocity. No physics engine.
+//    Heading h: forward = (sin h, cos h). Positive steer = right = clockwise (h decreases).
+// ===================================================================================
+const players = [];
+const KEYS = new Set();
+function createPlayer(id) {
+  const parts = buildBikeParts();
+  const root = G(), lean = G(); root.rotation.order = 'YXZ'; root.add(lean); lean.add(parts.frame); lean.add(parts.steer);
+  root.traverse(o => { if (o.isMesh) o.castShadow = true; });
+  const rider = buildCharacter('rider', 1.75); rider.position.set(0, -0.08, -0.3); rider.visible = false; lean.add(rider);
+  // first-person forearms + gloves on the grips (bar width 0.68)
+  const hands = G();
+  for (const s of [-1, 1]) {
+    const gx = s * 0.3, gz = BIKE.barZ - 0.09 - BIKE.headZ;
+    B(hands, 'Glove', gx - 0.05, BIKE.barY - 0.05, gz - 0.05, gx + 0.05, BIKE.barY + 0.04, gz + 0.06);
+    T(hands, 'Skin1', [gx, BIKE.barY - 0.01, gz - 0.03], [s * 0.25, BIKE.barY - 0.1, gz - 0.24], 0.035, 8);
+    T(hands, 'Hoodie', [s * 0.25, BIKE.barY - 0.1, gz - 0.24], [s * 0.23, BIKE.barY - 0.16, gz - 0.34], 0.045, 8);
+  }
+  parts.steer.add(hands);
+  const cargoAnchor = G(); cargoAnchor.position.set(0, BIKE.boxY + 0.03, -0.615); lean.add(cargoAnchor);
+  return {
+    id, root, lean, parts, rider, hands, cargoAnchor, camMode: 'fp',
+    bike: { x: 0, z: 0, y: 0, heading: 0, vx: 0, vz: 0, steer: 0, lean: 0, skid: 0, driftYaw: 0, yawRate: 0, pitch: 0, bump: 0, bumpV: 0, yVis: 0,
+      state: 'ride', brakeHold: 0, wheelRot: 0, pedal: 0, px: 0, pz: 0, py: 0, ph: 0, pl: 0, ps: 0, surf: 1, lastHit: -9, vF: 0, latAcc: 0, accel: 0 },
+    input: { steer: 0, throttle: 0, brake: 0, hardBrake: false, sprint: false },
+    pad: { prev: [] }, events: [], shake: 0,
+    checkpoint: null, cpTimer: 0,
+    chain: { mult: 1, points: 0, count: 0, cleanT: 0, best: 1, recent: new Map() },
+    cargo: null, order: null, onFoot: null, crashT: 0, rag: null,
+    stats: { orders: 0, tips: 0, pay: 0, bonus: 0, crashes: 0, bestChain: 1, nearMisses: 0 },
+  };
+}
+function bikeFwd(b) { return v(Math.sin(b.heading), Math.cos(b.heading)); }
+function snapshotBike(b) { b.px = b.x; b.pz = b.z; b.py = b.yVis; b.ph = b.heading; b.pl = b.lean; b.ps = b.steer; }
+
+function readInput(P) {
+  const k = c => KEYS.has(c), inp = P.input;
+  let steer = (k('KeyD') || k('ArrowRight') ? 1 : 0) - (k('KeyA') || k('ArrowLeft') ? 1 : 0);
+  let throttle = k('KeyW') || k('ArrowUp') ? 1 : 0, brake = k('KeyS') || k('ArrowDown') ? 0.8 : 0;
+  let hard = k('Space'), sprint = k('ShiftLeft') || k('ShiftRight');
+  const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+  const gp = pads && [...pads].find(p => p && p.connected);
+  if (gp) {
+    const ax = gp.axes[0] || 0; if (Math.abs(ax) > 0.12) steer = Math.sign(ax) * (Math.abs(ax) - 0.12) / 0.88;
+    throttle = Math.max(throttle, gp.buttons[7]?.value || 0); brake = Math.max(brake, gp.buttons[6]?.value || 0);
+    sprint = sprint || !!gp.buttons[5]?.pressed;
+    const pressed = gp.buttons.map(b => b.pressed);
+    const edge = i => pressed[i] && !P.pad.prev[i];
+    if (edge(0)) onAction('accept'); if (edge(1)) onAction('decline'); if (edge(3)) onAction('restart');
+    if (edge(2)) onAction('bell'); if (edge(8)) onAction('camera'); if (edge(9)) onAction('pause');
+    P.pad.prev = pressed;
+  }
+  inp.steer = steer; inp.throttle = throttle; inp.brake = brake; inp.hardBrake = hard; inp.sprint = sprint;
+}
+
+function updateBike(P, dt) {
+  const b = P.bike, T = TUNING, inp = P.input;
+  const f = bikeFwd(b);
+  let vF = b.vx * f.x + b.vz * f.z;
+  const speed = Math.hypot(b.vx, b.vz);
+  // --- steering: lock narrows with speed, rate-limited toward the target, expo for fine control
+  const steerMax = lerp(T.steerMaxLowDeg, T.steerMaxHighDeg, smooth(0, T.steerFalloffKmh * KMH, Math.abs(vF))) * DEG;
+  const sIn = Math.sign(inp.steer) * Math.pow(Math.abs(inp.steer), 1 + T.steerExpo * 2);
+  const target = sIn * steerMax;
+  const growing = Math.abs(target) > Math.abs(b.steer) && Math.sign(target) === Math.sign(b.steer || target);
+  b.steer = clamp(approach(b.steer, target, (growing ? T.steerRate : T.steerReturn) * steerMax * dt), -steerMax, steerMax);
+  // --- longitudinal: e-bike assist fades out approaching top speed, drag, two-stage brake
+  const vTop = (inp.sprint ? T.sprintTopSpeedKmh : T.topSpeedKmh) * KMH;
+  let a = 0;
+  if (inp.throttle > 0 && vF > -0.3) a += inp.throttle * (inp.sprint ? T.sprintAccel : T.pedalAccel) * (1 - smooth(vTop * (1 - T.assistFade), vTop, vF));
+  if (Math.abs(vF) > 0.01) a -= (T.rollingDrag + T.aeroDrag * vF * vF) * Math.sign(vF);
+  const hard = inp.hardBrake || inp.brake >= T.hardBrakeThreshold;
+  const brakeDecel = hard ? T.hardBrakeDecel : inp.brake * T.brakeDecel;
+  b.brakeHold = inp.brake > 0.2 && !hard && Math.abs(vF) < 0.3 && inp.throttle === 0 ? b.brakeHold + dt : 0;
+  let vNew;
+  if (b.brakeHold > 0.45) vNew = approach(vF, -T.reverseKmh * KMH, 2.5 * dt);           // walk the bike backwards
+  else {
+    vNew = vF + a * dt;
+    if (Math.sign(vNew) !== Math.sign(vF) && vF !== 0 && inp.throttle === 0) vNew = 0;
+    if (brakeDecel > 0) { const dv = brakeDecel * dt; vNew = Math.abs(vNew) <= dv ? 0 : vNew - Math.sign(vNew) * dv; }
+  }
+  b.accel = (vNew - vF) / dt;
+  b.vx += f.x * (vNew - vF); b.vz += f.z * (vNew - vF);
+  // --- skid: hard brake locks the rear, grip drops, the tail swings out (yaw drift)
+  const skidWant = hard && speed > T.minSkidKmh * KMH ? 1 : 0;
+  b.skid = approach(b.skid, skidWant, (skidWant ? T.skidOnRate : T.gripRecover) * dt);
+  let yawRate = -vNew * Math.tan(b.steer) / BIKE.wb;
+  yawRate *= lerp(1, T.skidSteerAuthority, b.skid);
+  const turnDir = Math.abs(b.steer) > 0.002 ? Math.sign(b.steer) : Math.abs(b.lean) > 0.02 ? Math.sign(b.lean) : Math.sign(-b.driftYaw);
+  b.driftYaw += (-turnDir * T.skidYawGain * speed * b.skid - b.driftYaw * T.skidYawDamp) * dt;
+  b.yawRate = yawRate + b.driftYaw;
+  b.heading = wrapAngle(b.heading + b.yawRate * dt);
+  // --- velocity direction converges on the heading (grip); slow convergence during a skid = slide
+  const sp = Math.hypot(b.vx, b.vz);
+  if (sp > 0.01) {
+    const f2 = bikeFwd(b), back = b.vx * f2.x + b.vz * f2.z < 0;
+    const ref = back ? b.heading + Math.PI : b.heading, va = Math.atan2(b.vx, b.vz);
+    const beta = wrapAngle(ref - va), grip = lerp(T.lateralGrip, T.skidGrip, b.skid);
+    const na = va + beta * (1 - Math.exp(-grip * dt));
+    const keep = 1 - b.skid * Math.abs(Math.sin(beta)) * 0.6 * dt;    // sideways sliding scrubs a little speed
+    b.vx = Math.sin(na) * sp * keep; b.vz = Math.cos(na) * sp * keep;
+  }
+  b.vF = vNew;
+  // --- integrate, then ground, curbs, obstacles
+  const ox = b.x, oz = b.z;
+  b.x += b.vx * dt; b.z += b.vz * dt;
+  groundAndCurbs(P, ox, oz, dt);
+  if (b.state === 'ride') collideStatic(P);
+  if (b.state === 'ride' && W.traffic) collideDynamic(P);
+  // --- visual lean: centripetal, clamped, smoothed. +lean = leaning right.
+  b.latAcc = sp * b.yawRate;
+  const leanTarget = clamp(Math.atan2(-b.latAcc, G_ACC), -T.leanMaxDeg * DEG, T.leanMaxDeg * DEG);
+  b.lean = damp(b.lean, leanTarget, T.leanResponse, dt);
+  b.wheelRot += vNew / BIKE.wheelR * dt;
+  if (inp.throttle > 0) b.pedal += dt * (2 + vNew * 0.9);
+  // suspension spring for bump visuals (never affects the sim)
+  b.bumpV += (-b.bump * 180 - b.bumpV * 14) * dt; b.bump += b.bumpV * dt;
+  // checkpoint every 2.5 s of clean riding on a surface
+  P.cpTimer += dt;
+  if (P.cpTimer > 2.5 && sp > 1 && W.time - b.lastHit > 1.5 && b.skid < 0.1 && (b.surf === 1 || b.surf === 2 || b.surf === 4)) { P.checkpoint = { x: b.x, z: b.z, heading: b.heading }; P.cpTimer = 0; }
+}
+function kick(P, amount) { P.bike.bumpV -= amount * 30 * TUNING.bumpCamGain; P.shake = Math.max(P.shake, amount * 2); if (P.cargo) cargoImpulse(P, 'bump', amount); }
+
+// ground height from the raster at both contact patches; curbs are rideable slowly, deflect at shallow angles, crash when fast
+function groundAndCurbs(P, ox, oz, dt) {
+  const b = P.bike, T = TUNING, S = W.surface, f = bikeFwd(b), half = BIKE.wb / 2 + 0.05;
+  const fx0 = ox + f.x * half, fz0 = oz + f.z * half, fx1 = b.x + f.x * half, fz1 = b.z + f.z * half;
+  const h0 = S.height(fx0, fz0), h1 = S.height(fx1, fz1);
+  if (h1 - h0 > 0.08 && b.state === 'ride') {
+    // climbing a curb: uphill direction from the height gradient at the new contact
+    let gx = S.height(fx1 + 0.3, fz1) - S.height(fx1 - 0.3, fz1), gz = S.height(fx1, fz1 + 0.3) - S.height(fx1, fz1 - 0.3);
+    const gl = Math.hypot(gx, gz); if (gl < 1e-4) { gx = f.x; gz = f.z; } else { gx /= gl; gz /= gl; }
+    const sp = Math.hypot(b.vx, b.vz), vIn = b.vx * gx + b.vz * gz, ang = Math.asin(clamp(vIn / Math.max(sp, 1e-3), 0, 1)) / DEG;
+    if (ang < T.curbShallowDeg && sp > 1.0) {        // glance off: the front wheel skids along the curb
+      b.x = ox; b.z = oz; b.vx -= gx * vIn * 1.15; b.vz -= gz * vIn * 1.15; b.vx *= 0.94; b.vz *= 0.94;
+      kick(P, 0.03); P.events.push('curbGlance'); breakCleanLine(P); return groundAndCurbs(P, ox, oz, 0);
+    } else if (vIn > T.curbCrashNormalKmh * KMH) { return crash(P, 'curb', null); }
+    else if (vIn > T.curbMountNormalKmh * KMH) { b.vx *= 1 - T.curbSpeedLoss * 2.2; b.vz *= 1 - T.curbSpeedLoss * 2.2; kick(P, T.curbBump * 2); P.events.push('curbHard'); breakCleanLine(P); }
+    else { const k = 1 - T.curbSpeedLoss * clamp(vIn / (T.curbMountNormalKmh * KMH), 0, 1); b.vx *= k; b.vz *= k; kick(P, T.curbBump); P.events.push('curb'); }
+  } else if (h0 - h1 > 0.08) { kick(P, 0.03 + 0.004 * Math.hypot(b.vx, b.vz)); P.events.push('drop'); }
+  // rear contact steps produce a second, smaller bump
+  const rx0 = ox - f.x * half, rz0 = oz - f.z * half, rx1 = b.x - f.x * half, rz1 = b.z - f.z * half;
+  const r0 = S.height(rx0, rz0), r1 = S.height(rx1, rz1);
+  if (Math.abs(r1 - r0) > 0.08) kick(P, 0.02);
+  b.y = (h1 + r1) / 2; b.pitch = Math.atan2(h1 - r1, BIKE.wb);
+  b.yVis = dt > 0 ? damp(b.yVis, b.y, 25, dt) : b.y;
+  b.surf = S.codeAt(b.x, b.z);
+}
+
+// capsule (4 circles along the bike axis) vs oriented boxes; resolve by push-out, then classify the impact
+const _near = [];
+function circleOBB(px, pz, r, c) {
+  const dx = px - c.cx, dz = pz - c.cz, lx = dx * c.ax + dz * c.az, lz = -dx * c.az + dz * c.ax;
+  const qx = clamp(lx, -c.hx, c.hx), qz = clamp(lz, -c.hz, c.hz), ex = lx - qx, ez = lz - qz, d2 = ex * ex + ez * ez;
+  if (d2 > r * r) return null;
+  let nlx, nlz, pen;
+  if (d2 > 1e-10) { const d = Math.sqrt(d2); nlx = ex / d; nlz = ez / d; pen = r - d; }
+  else { const pxp = c.hx - Math.abs(lx), pzp = c.hz - Math.abs(lz); if (pxp < pzp) { nlx = Math.sign(lx) || 1; nlz = 0; pen = pxp + r; } else { nlx = 0; nlz = Math.sign(lz) || 1; pen = pzp + r; } }
+  return { nx: nlx * c.ax - nlz * c.az, nz: nlx * c.az + nlz * c.ax, pen };
+}
+const CAPSULE = [-0.62, -0.21, 0.21, 0.62];
+function capsuleHit(b, c, r) {
+  const f = bikeFwd(b); let best = null;
+  for (const o of CAPSULE) { const h = circleOBB(b.x + f.x * o, b.z + f.z * o, r, c); if (h && (!best || h.pen > best.pen)) best = h; }
+  return best;
+}
+function collideStatic(P) {
+  const b = P.bike, r = TUNING.bikeRadius;
+  W.grid.query(b.x, b.z, 2.5, _near);
+  let worst = null;
+  for (let iter = 0; iter < 3; iter++) {
+    let deep = null;
+    for (const c of _near) {
+      if (c.y1 < b.y + 0.25 || c.y0 > b.y + 1.9) continue;
+      const h = capsuleHit(b, c, r); if (h && (!deep || h.pen > deep.pen)) deep = { ...h, c };
+    }
+    if (!deep) break;
+    b.x += deep.nx * (deep.pen + 1e-3); b.z += deep.nz * (deep.pen + 1e-3);
+    if (!worst || deep.pen > worst.pen) worst = deep;
+  }
+  if (worst) respondImpact(P, worst.nx, worst.nz, 0, 0, worst.c);
+}
+// n points from the obstacle toward the bike; (ovx,ovz) is the obstacle's velocity
+function respondImpact(P, nx, nz, ovx, ovz, c, kind = 'wall') {
+  const b = P.bike, T = TUNING;
+  const rvx = b.vx - ovx, rvz = b.vz - ovz, vn = rvx * nx + rvz * nz;
+  if (vn >= -0.05) return false;
+  const rel = Math.hypot(rvx, rvz), impact = -vn, ang = Math.asin(clamp(impact / Math.max(rel, 1e-3), 0, 1)) / DEG;
+  if (rel > T.crashMinKmh * KMH && ang > T.crashAngleDeg) { crash(P, kind, c, ovx, ovz); return true; }
+  b.vx -= (1 + T.wallBounce) * vn * nx; b.vz -= (1 + T.wallBounce) * vn * nz;
+  const loss = clamp(T.scrapeFriction * impact / Math.max(rel, 0.5), 0, 0.9); b.vx = ovx + (b.vx - ovx) * (1 - loss); b.vz = ovz + (b.vz - ovz) * (1 - loss);
+  const tx = -nz, tz = nx, f = bikeFwd(b), sg = Math.sign(f.x * tx + f.z * tz) || 1;
+  b.heading = wrapAngle(b.heading + clamp(wrapAngle(Math.atan2(tx * sg, tz * sg) - b.heading), -T.scrapeAlign * DT, T.scrapeAlign * DT));
+  if (impact > 0.6) { kick(P, Math.min(0.08, impact * 0.015)); P.events.push('scrape'); sfx('scrape', impact); }
+  b.lastHit = W.time; breakCleanLine(P);
+  return false;
+}
+function renderBike(P, alpha) {
+  const b = P.bike, x = lerp(b.px, b.x, alpha), z = lerp(b.pz, b.z, alpha), y = lerp(b.py, b.yVis, alpha);
+  const h = b.ph + wrapAngle(b.heading - b.ph) * alpha, ln = lerp(b.pl, b.lean, alpha), st = lerp(b.ps, b.steer, alpha);
+  P.root.position.set(x, y + b.bump * 0.4, z); P.root.rotation.set(-b.pitch, h, 0);
+  P.lean.rotation.z = ln; P.parts.steer.rotation.y = -st * 1.4;
+  P.parts.wheelF.rotation.x = b.wheelRot; P.parts.wheelR.rotation.x = b.wheelRot;
+  P.rider.visible = P.camMode !== 'fp'; P.hands.visible = P.camMode === 'fp';
+  if (P.rider.visible) {
+    const ph = b.pedal * 2, base = P.input.sprint && P.input.throttle ? POSES.stand_sprint : P.input.throttle ? POSES.pedal : POSES.coast;
+    const pose = { ...base };
+    if (P.input.throttle) { pose.hipL = [base.hipL[0] + 0.35 * Math.sin(ph), 0, 0.05]; pose.hipR = [base.hipR[0] + 0.35 * Math.sin(ph + Math.PI), 0, -0.05]; pose.knL = [base.knL[0] + 0.3 * Math.cos(ph), 0, 0]; pose.knR = [base.knR[0] + 0.3 * Math.cos(ph + Math.PI), 0, 0]; }
+    poseCharacter(P.rider, pose);
+  }
+}
+
+// ===================================================================================
+// 7. CAMERA AND POST-PROCESS — chest-mounted action cam at ~1.30 m, 25% of the lean,
+//    no head bob. One full-screen pass: barrel distortion, edge fringing, vignette, noise.
+// ===================================================================================
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance' });
+renderer.outputColorSpace = THREE.SRGBColorSpace;
+renderer.shadowMap.enabled = true; renderer.shadowMap.type = THREE.PCFShadowMap;
+const camera = new THREE.PerspectiveCamera(TUNING.fov, innerWidth / innerHeight, 0.08, TUNING.drawDistance);
+camera.rotation.order = 'YXZ';
+let rt = null;
+const post = {
+  scene: new THREE.Scene(), cam: new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1),
+  mat: new THREE.ShaderMaterial({
+    uniforms: { tDiffuse: { value: null }, uRes: { value: new THREE.Vector2(1, 1) }, uBarrel: { value: 0 }, uFringe: { value: 0 }, uVignette: { value: 0 }, uNoise: { value: 0 }, uTime: { value: 0 }, uSteam: { value: 0 }, uFlash: { value: 0 } },
+    vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+    fragmentShader: `uniform sampler2D tDiffuse; uniform vec2 uRes; uniform float uBarrel, uFringe, uVignette, uNoise, uTime, uSteam, uFlash; varying vec2 vUv;
+      void main(){
+        vec2 c = vUv * 2.0 - 1.0; float asp = uRes.x / uRes.y;
+        float r2 = (c.x * c.x * asp * asp + c.y * c.y) / (asp * asp + 1.0);
+        vec2 uvG = c * ((1.0 + uBarrel * r2) / (1.0 + uBarrel)) * 0.5 + 0.5;
+        vec2 fr = c * uFringe * r2;
+        vec3 col = vec3(texture2D(tDiffuse, uvG + fr).r, texture2D(tDiffuse, uvG).g, texture2D(tDiffuse, uvG - fr).b);
+        col *= mix(1.0, smoothstep(1.35, 0.25, sqrt(r2) * 1.15), uVignette);
+        float n = fract(sin(dot(floor(vUv * uRes) + fract(uTime) * 97.0, vec2(12.9898, 78.233))) * 43758.5453) - 0.5;
+        col += n * uNoise * (0.6 + 0.4 * col);
+        col = mix(col, vec3(0.92, 0.94, 0.95), clamp(uSteam * (0.75 + 0.25 * (1.0 - r2)), 0.0, 1.0));
+        col = mix(col, vec3(1.0), uFlash);
+        gl_FragColor = linearToOutputTexel(vec4(max(col, 0.0), 1.0));
+      }`,
+    depthTest: false, depthWrite: false,
+  }),
+};
+post.scene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), post.mat));
+function resize() {
+  const pr = Math.min(devicePixelRatio || 1, TUNING.pixelRatioMax);
+  renderer.setPixelRatio(pr); renderer.setSize(innerWidth, innerHeight, false);
+  camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+  const w = Math.floor(innerWidth * pr), h = Math.floor(innerHeight * pr);
+  if (rt) rt.dispose();
+  rt = new THREE.WebGLRenderTarget(w, h, { samples: 4 }); rt.texture.colorSpace = THREE.SRGBColorSpace;
+  post.mat.uniforms.uRes.value.set(w, h);
+}
+addEventListener('resize', resize);
+
+const camState = { tp: new THREE.Vector3(), tpInit: false, shake: 0, free: false, freePos: new THREE.Vector3(), freeYaw: 0, freePitch: -0.3 };
+const _cv = new THREE.Vector3();
+function updateCamera(P, alpha, dtReal) {
+  const T = TUNING;
+  if (Math.abs(camera.fov - T.fov) > 0.01) { camera.fov = T.fov; camera.updateProjectionMatrix(); }
+  if (camera.far !== T.drawDistance) { camera.far = T.drawDistance; camera.updateProjectionMatrix(); if (W) W.scene.fog.far = T.drawDistance; }
+  if (camState.free) return updateFreeCam(dtReal);
+  if (P.onFoot) return updateFootCamera(P, alpha);
+  const b = P.bike;
+  if (b.state === 'crash' && P.rag) return updateCrashCamera(P, alpha, dtReal);
+  const x = lerp(b.px, b.x, alpha), z = lerp(b.pz, b.z, alpha), y = lerp(b.py, b.yVis, alpha);
+  const h = b.ph + wrapAngle(b.heading - b.ph) * alpha, ln = lerp(b.pl, b.lean, alpha);
+  const f = v(Math.sin(h), Math.cos(h)), r = vrot(f);
+  P.shake = Math.max(0, P.shake - dtReal * 3);
+  const sh = P.shake * P.shake, jx = Math.sin(W.time * 63) * sh * 0.02, jy = Math.sin(W.time * 71 + 1) * sh * 0.02;
+  if (P.camMode === 'fp') {
+    const shift = Math.sin(ln) * T.camHeight * T.camLeanShift;
+    camera.position.set(x + f.x * T.camForward + r.x * shift + jx, y + T.camHeight * Math.cos(ln * T.camLeanShift) + b.bump * 0.6 + jy, z + f.z * T.camForward + r.z * shift);
+    camera.rotation.set(T.camPitchDeg * DEG - b.pitch * 0.5 - b.bump * 0.8, h + Math.PI, -ln * T.cameraLeanFactor);
+  } else {
+    const want = _cv.set(x - f.x * T.tpDistance, y + T.tpHeight, z - f.z * T.tpDistance);
+    if (!camState.tpInit) { camState.tp.copy(want); camState.tpInit = true; }
+    camState.tp.lerp(want, 1 - Math.exp(-6 * dtReal));
+    camera.position.copy(camState.tp); camera.lookAt(x + f.x * 2, y + 1.1, z + f.z * 2);
+  }
+}
+function updateFreeCam(dt) {
+  const k = c => KEYS.has(c), sp = (k('ShiftLeft') ? 40 : 12) * dt;
+  const f = new THREE.Vector3(-Math.sin(camState.freeYaw) * Math.cos(camState.freePitch), Math.sin(camState.freePitch), -Math.cos(camState.freeYaw) * Math.cos(camState.freePitch));
+  const r = new THREE.Vector3(Math.cos(camState.freeYaw), 0, -Math.sin(camState.freeYaw));
+  if (k('KeyW')) camState.freePos.addScaledVector(f, sp); if (k('KeyS')) camState.freePos.addScaledVector(f, -sp);
+  if (k('KeyD')) camState.freePos.addScaledVector(r, sp); if (k('KeyA')) camState.freePos.addScaledVector(r, -sp);
+  if (k('KeyE')) camState.freePos.y += sp; if (k('KeyQ')) camState.freePos.y -= sp;
+  camera.position.copy(camState.freePos); camera.rotation.set(camState.freePitch, camState.freeYaw, 0);
+}
+addEventListener('mousemove', e => { if (camState.free && e.buttons) { camState.freeYaw -= e.movementX * 0.004; camState.freePitch = clamp(camState.freePitch - e.movementY * 0.004, -1.5, 1.5); } });
+const fx = { steam: 0, flash: 0 };
+function renderFrame(scene) {
+  const T = TUNING;
+  if (T.post) {
+    renderer.setRenderTarget(rt); renderer.render(scene, camera); perf.calls = renderer.info.render.calls; perf.tris = renderer.info.render.triangles;
+    const u = post.mat.uniforms; u.tDiffuse.value = rt.texture; u.uBarrel.value = T.barrel; u.uFringe.value = T.fringe; u.uVignette.value = T.vignette; u.uNoise.value = T.noise;
+    u.uTime.value = performance.now() / 1000; u.uSteam.value = fx.steam; u.uFlash.value = fx.flash;
+    renderer.setRenderTarget(null); renderer.render(post.scene, post.cam);
+  } else { renderer.setRenderTarget(null); renderer.render(scene, camera); perf.calls = renderer.info.render.calls; perf.tris = renderer.info.render.triangles; }
+}
+// shadow camera follows the player, snapped to texels to avoid shimmering
+function updateSun(px, pz) {
+  const s = W.sun, snap = 110 / 2048;
+  const cx = Math.round(px / snap) * snap, cz = Math.round(pz / snap) * snap;
+  s.target.position.set(cx, 0, cz); s.position.set(cx - 50, 90, cz + 35); s.target.updateMatrixWorld();
+  s.castShadow = !!TUNING.shadows; renderer.shadowMap.enabled = !!TUNING.shadows;
+}
+
+// @@SECTION8@@
+// @@STUBS_BEGIN@@ (temporary: replaced by real sections in later delivery steps)
+function crash(P) { P.bike.vx = P.bike.vz = 0; P.events.push('crash'); return true; }
+function cargoImpulse() {}
+function collideDynamic() {}
+function breakCleanLine() {}
+function sfx() {}
+function updateCrashCamera() {}
+function updateFootCamera() {}
+// @@STUBS_END@@
+
+// ===================================================================================
+// 16. DEBUG AND TUNING (tuning panel part; debug overlay added in step 10)
+// ===================================================================================
+function saveTuning() { try { localStorage.setItem('lastmile.tuning', JSON.stringify(TUNING)); } catch (e) { /* storage blocked */ } }
+function buildTuningPanel() {
+  const el = document.getElementById('tuning'), groups = {};
+  for (const [grp, key, , min, max, step] of TUNING_SPEC) (groups[grp] ||= []).push({ key, min, max, step });
+  let html = '<div><button id="tCopy">Copy TUNING as JSON</button><button id="tReset">Reset defaults</button></div><div style="color:var(--dim);margin:4px 0">F2 closes. Traffic counts apply on shift restart.</div>';
+  for (const [grp, items] of Object.entries(groups)) html += `<details ${grp.startsWith('Bike') ? 'open' : ''}><summary>${grp}</summary>` + items.map(it => `<label><span title="${it.key}">${it.key}</span><input type="range" min="${it.min}" max="${it.max}" step="${it.step}" data-k="${it.key}"><output data-o="${it.key}"></output></label>`).join('') + '</details>';
+  el.innerHTML = html;
+  const sync = () => el.querySelectorAll('input[type=range]').forEach(inp => { inp.value = TUNING[inp.dataset.k]; el.querySelector(`output[data-o="${inp.dataset.k}"]`).textContent = (+TUNING[inp.dataset.k]).toFixed(inp.step < 0.01 ? 4 : inp.step < 1 ? 2 : 0); });
+  el.querySelectorAll('input[type=range]').forEach(inp => inp.addEventListener('input', () => { TUNING[inp.dataset.k] = +inp.value; sync(); saveTuning(); if (inp.dataset.k === 'pixelRatioMax') resize(); }));
+  el.querySelector('#tCopy').onclick = () => { const txt = JSON.stringify(TUNING, null, 2); (navigator.clipboard ? navigator.clipboard.writeText(txt) : Promise.reject()).then(() => toast('TUNING copied to clipboard'), () => { const ta = document.createElement('textarea'); ta.value = txt; document.body.appendChild(ta); ta.select(); try { document.execCommand('copy'); toast('TUNING copied'); } catch (e) { toast('Copy failed — see console'); console.log(txt); } ta.remove(); }); };
+  el.querySelector('#tReset').onclick = () => { Object.assign(TUNING, TUNING_DEFAULTS); sync(); saveTuning(); resize(); };
+  sync();
+}
+function toast(msg) { const d = document.createElement('div'); d.className = 'pop'; d.style.fontSize = '16px'; d.textContent = msg; document.getElementById('popups').appendChild(d); setTimeout(() => d.remove(), 1200); }
+
+// ===================================================================================
+// 17. MAIN LOOP — fixed 60 Hz simulation, interpolated rendering
+// ===================================================================================
+const game = { mode: 'title', paused: false, timeScale: 1, seed: '' };
+const ui = id => document.getElementById(id);
+function spawnPlayer(P, lane) {
+  const lanes = W.lanes.filter(l => l.type === 'bike');
+  const L = lane || lanes[Math.min(1, lanes.length - 1)] || W.lanes[0];
+  const p = vat(L.a, L.d, L.len * 0.3, L.d, 0);
+  placeBike(P, p.x, p.z, yawOf(L.d));
+}
+function placeBike(P, x, z, heading) {
+  const b = P.bike;
+  Object.assign(b, { x, z, heading, vx: 0, vz: 0, steer: 0, lean: 0, skid: 0, driftYaw: 0, yawRate: 0, bump: 0, bumpV: 0, state: 'ride', brakeHold: 0 });
+  b.y = b.yVis = W.surface.height(x, z); snapshotBike(b); P.checkpoint = { x, z, heading }; P.cpTimer = 0; camState.tpInit = false;
+}
+function startWorld(seed, graph = 'district') {
+  game.seed = seed;
+  if (W) { W.scene.traverse(o => { if (o.geometry && o.geometry !== UNIT_BOX && !GEO_CACHE_SET.has(o.geometry)) o.geometry.dispose(); }); }
+  createWorld(seed, graph);
+  if (!players[0]) players[0] = createPlayer(0);
+  for (const P of players) { W.scene.add(P.root); spawnPlayer(P); }
+}
+const GEO_CACHE_SET = new Set();
+function onAction(a) {
+  const P = players[0]; if (!P) return;
+  if (a === 'camera') { P.camMode = P.camMode === 'fp' ? 'tp' : 'fp'; camState.tpInit = false; }
+  if (a === 'restart' && P.checkpoint && !P.onFoot) { placeBike(P, P.checkpoint.x, P.checkpoint.z, P.checkpoint.heading); }
+  if (a === 'pause') { game.paused = !game.paused; ui('pause').style.display = game.paused ? 'flex' : 'none'; }
+}
+addEventListener('keydown', e => {
+  if (e.target && e.target.tagName === 'INPUT' && e.target.type === 'text') return;
+  if (['F1', 'F2', 'Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Backquote', 'Tab'].includes(e.code)) e.preventDefault();
+  KEYS.add(e.code); if (e.repeat) return;
+  const map = { KeyV: 'camera', KeyR: 'restart', Escape: 'pause', KeyE: 'accept', KeyQ: 'decline', KeyB: 'bell', KeyM: 'mute' };
+  if (e.code === 'F2') { const t = ui('tuning'); t.style.display = t.style.display === 'block' ? 'none' : 'block'; return; }
+  if (e.code === 'Enter' && game.mode === 'title') { beginShift(); return; }
+  if (map[e.code] && game.mode !== 'title') onAction(map[e.code]);
+});
+addEventListener('keyup', e => KEYS.delete(e.code));
+addEventListener('blur', () => KEYS.clear());
+
+function beginShift() { ui('title').style.display = 'none'; game.mode = 'street'; }
+function tick(dt) {
+  W.time += dt;
+  for (const P of players) {
+    snapshotBike(P.bike);
+    if (P.bike.state === 'ride') updateBike(P, dt);
+    P.events.length = 0;
+  }
+}
+function updateHUD(P) {
+  ui('spd').textContent = Math.round(Math.hypot(P.bike.vx, P.bike.vz) * 3.6);
+}
+let acc = 0, last = performance.now();
+const perf = { fps: 60, ms: 16 };
+function frame(now) {
+  requestAnimationFrame(frame);
+  const dtReal = Math.min(0.1, (now - last) / 1000); last = now;
+  perf.ms = lerp(perf.ms, dtReal * 1000, 0.05); perf.fps = 1000 / perf.ms;
+  const P = players[0];
+  if (game.mode !== 'title' && !game.paused) {
+    readInput(P);
+    acc += dtReal * game.timeScale;
+    let n = 0; while (acc >= DT && n < 6) { tick(DT); acc -= DT; n++; }
+    if (n === 6) acc = 0;
+  }
+  const alpha = clamp(acc / DT, 0, 1);
+  renderBike(P, alpha);
+  updateCamera(P, alpha, dtReal);
+  updateSun(P.bike.x, P.bike.z);
+  renderFrame(W.scene);
+  updateHUD(P, dtReal);
+}
+function boot() {
+  for (const g of GEO_CACHE.values()) GEO_CACHE_SET.add(g);
+  resize(); buildTuningPanel();
+  const hashSeed = (location.hash.match(/seed=([^&]+)/) || [])[1];
+  const seed = hashSeed ? decodeURIComponent(hashSeed) : 'demo';
+  ui('seedInput').value = seed;
+  startWorld(seed, 'oneBlock');
+  ui('title').style.display = 'flex';
+  ui('startBtn').onclick = beginShift;
+  // test hook: advance the fixed-step simulation synchronously (headless tests render slowly)
+  const sim = (sec) => { const P = players[0]; for (let i = 0; i < Math.round(sec / DT); i++) { readInput(P); tick(DT); } acc = 0; return W.time; };
+  window.__game = { get W() { return W; }, players, TUNING, MODULES, game, KEYS, perf, renderer, sim, onAction };
+  requestAnimationFrame(frame);
+}
+boot();
+
+</script>
+</body>
+</html>
