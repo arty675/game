@@ -1509,6 +1509,7 @@ function createWorld(seed, graphName = 'district') {
   const t0 = performance.now();
   genDistrict(w);
   w.batchMeshes = w.batcher.build(w.staticRoot, BATCH_MAT);
+  buildTraffic(w); buildSignalLamps(w); buildPeds(w);
   w.genMs = performance.now() - t0;
   return w;
 }
@@ -2051,13 +2052,338 @@ function cargoReattach(P) {
   c.ox = c.oy = c.oz = c.vx = c.vy = c.vz = 0; P.cargoProp = null;
 }
 
-// @@SECTION10@@
+// ===================================================================================
+// 10. TRAFFIC — kinematic cars on the lane graph, IDM car-following, signalled junctions with a
+//     phase cycle, junction occupancy for conflicting turns. Cars never target the player
+//     (the bike is treated as a leader to brake for) except scripted hazards (situations).
+// ===================================================================================
+const CAR_TYPES = [['VEH_Hatchback', 3], ['VEH_Taxi', 2.5], ['VEH_SUV', 2], ['VEH_Minivan', 2], ['VEH_DeliveryVan', 1.2], ['VEH_BoxTruck', 0.6]];
+const IDM = { a: 1.6, b: 2.6, T: 1.15, s0: 2.2 };
+const SIGNAL_CYCLE = [['x', 'green', 13], ['x', 'yellow', 3], ['-', 'red', 1.5], ['z', 'green', 11], ['z', 'yellow', 3], ['-', 'red', 1.5]];
+function polyPath(pts) { const cum = [0]; for (let i = 1; i < pts.length; i++) cum.push(cum[i - 1] + vlen(vsub(pts[i], pts[i - 1]))); return { pts, cum, len: cum[cum.length - 1] }; }
+function pathAt(path, s, out) {
+  const { pts, cum } = path; s = clamp(s, 0, path.len);
+  let i = 1; while (i < cum.length - 1 && cum[i] < s) i++;
+  const a = pts[i - 1], b = pts[i], t = (s - cum[i - 1]) / Math.max(cum[i] - cum[i - 1], 1e-6);
+  out.x = a.x + (b.x - a.x) * t; out.z = a.z + (b.z - a.z) * t; out.dx = (b.x - a.x); out.dz = (b.z - a.z); const l = Math.hypot(out.dx, out.dz) || 1; out.dx /= l; out.dz /= l;
+  return out;
+}
+function segHit(a, b, c, d) { const r = vsub(b, a), s = vsub(d, c), den = vcross(r, s); if (Math.abs(den) < 1e-9) return false; const t = vcross(vsub(c, a), s) / den, u = vcross(vsub(c, a), r) / den; return t > 0.02 && t < 0.98 && u > 0.02 && u < 0.98; }
+function buildTraffic(W) {
+  const R = W.rng.traffic, tr = { cars: [], conns: [], mesh: {}, time: 0 };
+  for (const j of W.layout.junctions) {
+    j.conns = []; j.phaseT = R.range(0, 30); j.phase = 0;
+    const inc = W.lanes.filter(l => l.type === 'travel' && l.endJ === j), out = W.lanes.filter(l => l.type === 'travel' && l.startJ === j);
+    for (const a of inc) for (const b of out) {
+      if (b.run === a.run) continue;
+      const cr = vcross(a.d, b.d), dd = vdot(a.d, b.d), turn = dd > 0.7 ? 'straight' : cr > 0 ? 'right' : 'left';
+      const p0 = a.b, p3 = b.a, dist = vlen(vsub(p3, p0)), k = turn === 'straight' ? dist / 3 : dist * 0.45;
+      const p1 = vadd(p0, vmul(a.d, k)), p2 = vsub(p3, vmul(b.d, k)), pts = [];
+      for (let i = 0; i <= 12; i++) { const t = i / 12, u = 1 - t; pts.push(v(u * u * u * p0.x + 3 * u * u * t * p1.x + 3 * u * t * t * p2.x + t * t * t * p3.x, u * u * u * p0.z + 3 * u * u * t * p1.z + 3 * u * t * t * p2.z + t * t * t * p3.z)); }
+      const c = { id: tr.conns.length, conn: true, from: a, to: b, j, turn, ...polyPath(pts), occ: new Set(), cars: [], conflicts: [] };
+      a.conns.push(c); j.conns.push(c); tr.conns.push(c);
+    }
+    for (const c of j.conns) for (const d of j.conns) {
+      if (c === d) continue;
+      let hit = c.to === d.to || c.from === d.from && false;
+      for (let i = 1; i < c.pts.length && !hit; i++) for (let k = 1; k < d.pts.length && !hit; k++) if (segHit(c.pts[i - 1], c.pts[i], d.pts[k - 1], d.pts[k])) hit = true;
+      if (hit) c.conflicts.push(d);
+    }
+  }
+  for (const l of W.lanes) { l.cars = []; if (l.type === 'travel') Object.assign(l, polyPath(l.pts)); }
+  for (const [id] of CAR_TYPES) { const geo = bakeGroup(MODULES[id].build()); tr.mesh[id] = geo; }
+  const travel = W.lanes.filter(l => l.type === 'travel' && l.len > 20);
+  const n = Math.round(TUNING.trafficCars);
+  for (let i = 0, tries = 0; i < n && tries < n * 20; tries++) {
+    const L = R.pick(travel), s = R.range(6, L.len - 6);
+    if (L.cars.some(c => Math.abs(c.s - s) < 13)) continue;
+    spawnCar(W, tr, R.weighted(CAR_TYPES, x => x[1])[0], L, s, R); i++;
+  }
+  W.traffic = tr;
+}
+function spawnCar(W, tr, type, path, s, R, opt = {}) {
+  const def = MODULES[type], mesh = new THREE.Mesh(tr.mesh[type], BATCH_MAT); mesh.castShadow = true; mesh.receiveShadow = true; W.dynamicRoot.add(mesh);
+  const car = { id: tr.cars.length, type, path, s, v: opt.v ?? R.range(4, 8), len: def.d, w: def.w, h: def.h, x: 0, z: 0, heading: 0, px: 0, pz: 0, ph: 0, mesh,
+    v0f: R.range(0.88, 1.08), next: null, committed: null, blockedT: 0, honkT: 0, script: null, ignorePlayer: false, nearT: -9 };
+  path.cars.push(car); tr.cars.push(car); placeCarOnPath(car); car.px = car.x; car.pz = car.z; car.ph = car.heading;
+  return car;
+}
+const _pa = { x: 0, z: 0, dx: 0, dz: 1 };
+function placeCarOnPath(car) { pathAt(car.path, car.s, _pa); car.x = _pa.x; car.z = _pa.z; car.heading = Math.atan2(_pa.dx, _pa.dz); }
+function laneSignal(lane) {
+  const j = lane.endJ; if (!j.signal) return 'green';
+  const [axis, col] = SIGNAL_CYCLE[j.phase]; return axis === lane.axis ? col : 'red';
+}
+function pedWalk(j, crossing) { if (!j.signal) return true; const [axis, col] = SIGNAL_CYCLE[j.phase]; return col === 'green' && axis !== crossing.axis && j.phaseT < SIGNAL_CYCLE[j.phase][2] * 0.75; }
+function updateSignals(dt) {
+  for (const j of W.layout.junctions) { if (!j.signal) continue; j.phaseT += dt; while (j.phaseT >= SIGNAL_CYCLE[j.phase][2]) { j.phaseT -= SIGNAL_CYCLE[j.phase][2]; j.phase = (j.phase + 1) % SIGNAL_CYCLE.length; } }
+}
+function chooseNext(car) { const L = car.path; if (!L.conns || !L.conns.length) return null; const w = c => (c.turn === 'straight' ? 5 : c.turn === 'right' ? 3 : 2); return W.rng.traffic.weighted(L.conns, w); }
+function canEnter(car, c) {
+  const sig = laneSignal(car.path);
+  if (sig === 'red') return false;
+  if (sig === 'yellow') { const dist = car.path.len - car.s - car.len / 2; if (dist > car.v * car.v / (2 * 3.0) + 1) return false; }
+  for (const d of c.conflicts) for (const o of d.occ) if (o !== car) return false;
+  const last = c.to.cars.reduce((m, o) => (o.s < m ? o.s : m), Infinity);
+  if (last < car.len + 4) return false;
+  for (const o of c.cars) if (o.s < car.len + 2) return false;
+  return true;
+}
+// gap to whatever the car must not hit: cars, stop line, the bike, pedestrians
+function leaderGap(car, P) {
+  let gap = Infinity, lv = 0;
+  const check = (path, offset) => { for (const o of path.cars) if (o !== car) { const ds = offset + o.s - car.s; if (ds > 0) { const g = ds - (o.len + car.len) / 2; if (g < gap) { gap = g; lv = o.v; } } } };
+  check(car.path, 0);
+  if (!car.path.conn) {
+    if (!car.next) car.next = chooseNext(car);
+    const stop = car.path.len - car.s - car.len / 2;
+    if (car.next) {
+      if (car.committed !== car.next) { if (stop < 25 && canEnter(car, car.next)) { car.committed = car.next; car.next.occ.add(car); } }
+      if (car.committed !== car.next) { if (stop < gap) { gap = stop; lv = 0; } }
+      else { check(car.next, car.path.len); check(car.next.to, car.path.len + car.next.len); }
+    } else if (stop < gap) { gap = stop; lv = 0; }
+  } else check(car.path.to, car.path.len);
+  // the bike and pedestrians in the corridor ahead
+  const f = v(Math.sin(car.heading), Math.cos(car.heading));
+  const obstacles = [];
+  if (P && !car.ignorePlayer && !P.onFoot) { const b = P.bike, st = b.state === 'crash' ? (P.rag ? P.rag.p[2] : b) : b; obstacles.push([st.x, st.z, b.state === 'ride' ? b.vx * f.x + b.vz * f.z : 0, 0.9]); }
+  if (W.peds) for (const pd of W.peds.list) if (pd.active) obstacles.push([pd.x, pd.z, 0, 0.5]);
+  for (const [ox, oz, ov, rad] of obstacles) {
+    const dx = ox - car.x, dz = oz - car.z, along = dx * f.x + dz * f.z; if (along <= 0 || along > 35) continue;
+    const lat = Math.abs(dx * f.z - dz * f.x); if (lat > car.w / 2 + rad + 0.3) continue;
+    const g = along - car.len / 2 - rad; if (g < gap) { gap = g; lv = Math.max(0, ov); }
+  }
+  return { gap, lv };
+}
+function updateTraffic(dt) {
+  const tr = W.traffic; if (!tr) return; tr.time += dt;
+  const P = players[0], v0base = TUNING.carSpeedKmh * KMH;
+  for (const car of tr.cars) {
+    car.px = car.x; car.pz = car.z; car.ph = car.heading;
+    if (car.script) { car.script(car, dt); continue; }
+    const { gap, lv } = leaderGap(car, P);
+    let v0 = v0base * car.v0f; if (car.path.conn) v0 = car.path.turn === 'straight' ? v0 : Math.min(v0, 5.5);
+    const dv = car.v - lv, sStar = IDM.s0 + Math.max(0, car.v * IDM.T + car.v * dv / (2 * Math.sqrt(IDM.a * IDM.b)));
+    let a = IDM.a * (1 - Math.pow(car.v / v0, 4) - Math.pow(sStar / Math.max(gap, 0.1), 2));
+    a = clamp(a, -9, IDM.a);
+    car.v = Math.max(0, car.v + a * dt);
+    if (gap < 0.3 && car.v > 0) car.v = 0;
+    // blocked by the player for a while → honk (drivers are rude, not lethal)
+    car.blockedT = car.v < 1 && gap < 6 && P && Math.hypot(P.bike.x - car.x, P.bike.z - car.z) < 9 ? car.blockedT + dt : 0;
+    if (car.blockedT > 1.8 && tr.time - car.honkT > 4) { car.honkT = tr.time; sfx('honk', 1, car); }
+    advanceCar(car, car.v * dt);
+  }
+}
+function advanceCar(car, ds) {
+  car.s += ds;
+  while (car.s > car.path.len) {
+    const extra = car.s - car.path.len, old = car.path;
+    let nxt;
+    if (old.conn) { nxt = old.to; old.occ.delete(car); }
+    else { nxt = car.committed || car.next || chooseNext(car); if (nxt && !car.committed) nxt.occ.add(car); car.committed = null; car.next = null; }
+    if (!nxt) { car.s = old.len; break; }
+    old.cars.splice(old.cars.indexOf(car), 1); nxt.cars.push(car); car.path = nxt; car.s = extra;
+  }
+  placeCarOnPath(car);
+}
+function renderTraffic(alpha) {
+  const tr = W.traffic; if (!tr) return;
+  for (const c of tr.cars) { c.mesh.position.set(lerp(c.px, c.x, alpha), Y_ROAD, lerp(c.pz, c.z, alpha)); c.mesh.rotation.y = c.ph + wrapAngle(c.heading - c.ph) * alpha; }
+  if (tr.lamps) updateSignalLamps(tr);
+}
+// lit signal heads: one InstancedMesh for every lamp, colours swapped by phase
+function buildSignalLamps(W) {
+  const lamps = W.signalLamps, geo = new THREE.CylinderGeometry(0.1, 0.1, 0.02, 10); geo.rotateX(Math.PI / 2);
+  const im = new THREE.InstancedMesh(geo, new THREE.MeshBasicMaterial({ color: 0xffffff }), lamps.length);
+  const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler();
+  lamps.forEach((l, i) => { q.setFromEuler(e.set(0, l.yaw, 0)); m.compose(new THREE.Vector3(l.p.x, l.p.y, l.p.z), q, new THREE.Vector3(1, 1, 1)); im.setMatrixAt(i, m); im.setColorAt(i, new THREE.Color(0)); });
+  im.frustumCulled = false; W.scene.add(im); W.traffic.lamps = im; W.traffic.lampCols = { red: new THREE.Color(0xff3b30), amber: new THREE.Color(0xffb020), green: new THREE.Color(0x3dff7a), walk: new THREE.Color(0xf4f4f4), dont: new THREE.Color(0xff7a1a), off: new THREE.Color(0x15171a) };
+}
+function updateSignalLamps(tr) {
+  const C = tr.lampCols, im = tr.lamps;
+  W.signalLamps.forEach((l, i) => {
+    const j = l.j, [axis, col] = SIGNAL_CYCLE[j.phase];
+    let lit;
+    if (l.ped) { const walk = col === 'green' && axis !== l.axis && j.phaseT < SIGNAL_CYCLE[j.phase][2] * 0.75; lit = l.kind === 'walk' ? walk : !walk; }
+    else { const state = axis === l.axis ? col : 'red'; lit = (l.kind === 'red' && state === 'red') || (l.kind === 'amber' && state === 'yellow') || (l.kind === 'green' && state === 'green'); }
+    im.setColorAt(i, lit ? C[l.kind] : C.off);
+  });
+  im.instanceColor.needsUpdate = true;
+}
+// bike vs moving cars (oriented boxes with velocity) + near-miss detection
+function carOBB(c) { return { cx: c.x, cz: c.z, hx: c.w / 2, hz: c.len / 2, ax: Math.cos(c.heading), az: -Math.sin(c.heading), y0: Y_ROAD, y1: c.h }; }
+function collideDynamic(P) {
+  const b = P.bike, tr = W.traffic; if (!tr) return;
+  const sp = Math.hypot(b.vx, b.vz);
+  for (const c of tr.cars) {
+    const dx = c.x - b.x, dz = c.z - b.z; if (dx * dx + dz * dz > 64) continue;
+    const box = carOBB(c), cvx = Math.sin(c.heading) * c.v, cvz = Math.cos(c.heading) * c.v;
+    const h = capsuleHit(b, box, TUNING.bikeRadius);
+    if (h) { b.x += h.nx * h.pen; b.z += h.nz * h.pen; if (respondImpact(P, h.nx, h.nz, cvx, cvz, c, 'car')) return; continue; }
+    // near miss: closest approach of the bike capsule to the car box
+    if (c.v > 1 && sp > TUNING.nearMissMinKmh * KMH && W.time - c.nearT > 3) {
+      const d = capsuleDistance(b, box);
+      if (d < TUNING.nearMissDist) { c.nearT = W.time; nearMiss(P, 'car'); }
+    }
+  }
+  if (W.peds) collidePeds(P);
+}
+function capsuleDistance(b, box) {
+  const f = bikeFwd(b); let best = Infinity;
+  for (const o of CAPSULE) { const px = b.x + f.x * o, pz = b.z + f.z * o, dx = px - box.cx, dz = pz - box.cz, lx = dx * box.ax + dz * box.az, lz = -dx * box.az + dz * box.ax;
+    const ex = Math.max(Math.abs(lx) - box.hx, 0), ez = Math.max(Math.abs(lz) - box.hz, 0); best = Math.min(best, Math.hypot(ex, ez) - TUNING.bikeRadius); }
+  return best;
+}
+
+// ===================================================================================
+// 11. PEDESTRIANS — walk sidewalk loops, cross at crosswalks on the walk phase, rare jaywalkers.
+//     Drawn as one InstancedMesh per body part (16 draw calls for the whole crowd).
+// ===================================================================================
+const PED_MAX = 72;
+function closestOnPath(path, p) {
+  let best = null;
+  for (let i = 1; i < path.pts.length; i++) {
+    const a = path.pts[i - 1], b = path.pts[i], d = vsub(b, a), L = vlen(d) || 1e-6, t = clamp(vdot(vsub(p, a), d) / (L * L), 0, 1), q = vat(a, d, t, d, 0), dist = vlen(vsub(p, q));
+    if (!best || dist < best.dist) best = { q, dist, s: path.cum[i - 1] + t * L };
+  }
+  return best;
+}
+function buildPeds(W) {
+  const R = W.rng.peds, peds = { list: [], loops: [], im: {} };
+  for (const blk of [...W.layout.blocks, W.layout.outer]) {
+    const n = blk.sides.length, pts = [];
+    for (let i = 0; i < n; i++) { const prev = blk.sides[(i - 1 + n) % n], s = blk.sides[i]; pts.push(vadd(blk.poly[i], vmul(vadd(prev.nOut, s.nOut), 1.8))); }
+    pts.push(pts[0]);
+    peds.loops.push({ blk, ...polyPath(pts), links: [] });
+  }
+  for (const j of W.layout.junctions) for (const c of j.crossings) {
+    const ends = [c.a, c.b].map(p => { let best = null; for (const L of peds.loops) { const h = closestOnPath(L, p); if (!best || h.dist < best.h.dist) best = { L, h }; } return best; });
+    if (ends[0].L === ends[1].L || ends[0].h.dist > 6 || ends[1].h.dist > 6) continue;
+    const link = { j, c, A: { loop: ends[0].L, s: ends[0].h.s, curb: vadd(c.a, vmul(c.rE, 0.4)) }, B: { loop: ends[1].L, s: ends[1].h.s, curb: vadd(c.b, vmul(c.rE, -0.4)) } };
+    ends[0].L.links.push({ link, side: 'A' }); ends[1].L.links.push({ link, side: 'B' });
+  }
+  for (const part of PART_LIST) { const im = new THREE.InstancedMesh(UNIT_BOX, new THREE.MeshLambertMaterial({ flatShading: true }), PED_MAX); im.count = 0; im.castShadow = true; im.frustumCulled = false; im.instanceMatrix.setUsage(THREE.DynamicDrawUsage); W.scene.add(im); peds.im[part] = im; }
+  const total = peds.loops.reduce((a, l) => a + l.len, 0);
+  for (let i = 0; i < Math.min(PED_MAX - 12, Math.round(TUNING.pedestrians)); i++) {
+    let r = R.float() * total, loop = peds.loops[0]; for (const L of peds.loops) { r -= L.len; if (r <= 0) { loop = L; break; } }
+    const pd = makePed(peds, R, R.chance(0.5) ? 'pedA' : 'pedB'); pd.loop = loop; pd.s = R.range(0, loop.len); pd.dir = R.chance(0.5) ? 1 : -1; pd.state = 'walk';
+    placePedOnLoop(pd); pd.px = pd.x; pd.pz = pd.z; pd.ph = pd.heading;
+  }
+  W.peds = peds;
+}
+const SKINS = ['Skin1', 'Skin2', 'Skin3', 'Skin4'], HAIRS = ['Hair1', 'Hair2', 'Hair3'];
+function makePed(peds, R, outfit) {
+  const o = { ...OUTFITS[outfit] };
+  o.skin = R.pick(SKINS); o.hair = R.pick(HAIRS); if (o.fore.startsWith('Skin')) o.fore = o.skin; if (o.hand.startsWith('Skin')) o.hand = o.skin; if (o.shin.startsWith('Skin')) o.shin = o.skin;
+  const pd = { id: peds.list.length, outfit: o, k: R.range(1.62, 1.85) / 1.75, speed: R.range(1.1, 1.55), x: 0, z: 0, heading: 0, px: 0, pz: 0, ph: 0, phase: R.range(0, 6), state: 'walk', active: true, timer: 0, pose: null, nearT: -9, hairBox: R.chance(0.5) ? [0.22, 0.05, 0.24] : [0.23, 0.09, 0.25], moving: true, side: 0 };
+  peds.list.push(pd);
+  PART_LIST.forEach(part => peds.im[part].setColorAt(pd.id, M(partColour(o, part)).color));
+  return pd;
+}
+function placePedOnLoop(pd) { pathAt(pd.loop, pd.s, _pa); const r = vrot(v(_pa.dx, _pa.dz)); pd.x = _pa.x + r.x * pd.side; pd.z = _pa.z + r.z * pd.side; pd.heading = Math.atan2(_pa.dx * pd.dir, _pa.dz * pd.dir); }
+function walkTo(pd, t, dt, speed = pd.speed) { const dx = t.x - pd.x, dz = t.z - pd.z, d = Math.hypot(dx, dz); if (d < 0.05) return true; const st = Math.min(d, speed * dt); pd.x += dx / d * st; pd.z += dz / d * st; pd.heading = Math.atan2(dx, dz); return d < 0.15; }
+function updatePeds(dt) {
+  const peds = W.peds; if (!peds) return; const R = W.rng.peds, P = players[0];
+  for (const pd of peds.list) {
+    if (!pd.active) continue;
+    pd.px = pd.x; pd.pz = pd.z; pd.ph = pd.heading; pd.moving = false;
+    if (pd.script) { pd.script(pd, dt); continue; }
+    // flinch away from a fast bike (comic sidestep), relaxes back
+    const b = P.bike, dbx = pd.x - b.x, dbz = pd.z - b.z, dd = Math.hypot(dbx, dbz), sp = Math.hypot(b.vx, b.vz);
+    if (pd.state === 'walk') {
+      const len = pd.loop.len, s0 = pd.s; pd.s = ((pd.s + pd.dir * pd.speed * dt) % len + len) % len; pd.moving = true;
+      const want = dd < 3 && sp > 3 ? clamp((pd.side || 0) + Math.sign((dbx * Math.cos(pd.heading) - dbz * Math.sin(pd.heading)) || 1) * 0.6, -0.9, 0.9) : 0;
+      pd.side = damp(pd.side, want, 6, dt);
+      for (const lk of pd.loop.links) {
+        const end = lk.link[lk.side], ds = ((end.s - s0) * pd.dir + len) % len;
+        if (ds < pd.speed * dt + 1e-6 && R.chance(0.4)) { pd.state = 'toCurb'; pd.link = lk.link; pd.from = lk.side; break; }
+      }
+      if (pd.state === 'walk' && R.chance(TUNING.jaywalkChance * dt / 20)) startJaywalk(pd);
+      if (pd.state === 'walk') placePedOnLoop(pd);
+    } else if (pd.state === 'toCurb') { pd.moving = true; if (walkTo(pd, pd.link[pd.from].curb, dt)) pd.state = 'wait'; }
+    else if (pd.state === 'wait') { pd.heading = Math.atan2(pd.link[pd.from === 'A' ? 'B' : 'A'].curb.x - pd.x, pd.link[pd.from === 'A' ? 'B' : 'A'].curb.z - pd.z); if (pedWalk(pd.link.j, pd.link.c) && !carNear(pd.x, pd.z, pd.link.j.signal ? 0 : 14)) pd.state = 'cross'; }
+    else if (pd.state === 'cross') { pd.moving = true; const to = pd.link[pd.from === 'A' ? 'B' : 'A']; if (walkTo(pd, to.curb, dt, pd.speed * 1.1)) { pd.state = 'fromCurb'; pd.toEnd = to; } }
+    else if (pd.state === 'fromCurb') { pd.moving = true; pathAt(pd.toEnd.loop, pd.toEnd.s, _pa); if (walkTo(pd, _pa, dt)) { pd.loop = pd.toEnd.loop; pd.s = pd.toEnd.s; pd.dir = R.chance(0.5) ? 1 : -1; pd.state = 'walk'; pd.side = 0; } }
+    else if (pd.state === 'jaywalk') { pd.moving = true; if (walkTo(pd, pd.target, dt, pd.speed * 1.15)) rejoinLoop(pd); }
+    else if (pd.state === 'knocked') { pd.timer -= dt; pd.x += pd.slide.x * dt; pd.z += pd.slide.z * dt; pd.slide = vmul(pd.slide, Math.exp(-5 * dt)); if (pd.timer <= 0) rejoinLoop(pd); }
+    if (pd.moving) pd.phase += pd.speed * dt * 4.2;
+  }
+}
+function carNear(x, z, r) { if (!r || !W.traffic) return false; return W.traffic.cars.some(c => Math.hypot(c.x - x, c.z - z) < r && c.v > 0.5); }
+function rejoinLoop(pd) {
+  let best = null; for (const L of W.peds.loops) { const h = closestOnPath(L, pd); if (!best || h.dist < best.h.dist) best = { L, h }; }
+  pd.loop = best.L; pd.s = best.h.s; pd.state = 'fromCurb'; pd.toEnd = { loop: best.L, s: best.h.s }; pd.pose = null;
+}
+function startJaywalk(pd) {
+  pathAt(pd.loop, pd.s, _pa); const out = pd.loop.blk.id === 'OUT' ? vmul(vrot(v(_pa.dx, _pa.dz)), -1) : vrot(v(_pa.dx, _pa.dz));
+  const n = vmul(out, pd.loop.blk.id === 'OUT' ? 1 : -1); // toward the street
+  for (const L of W.peds.loops) { if (L === pd.loop) continue; const probe = vat(pd, n, 14, n, 0), h = closestOnPath(L, probe); if (h.dist < 9) { pd.target = h.q; pd.state = 'jaywalk'; pd.jay = true; return; } }
+}
+function knockPed(pd, vx, vz) { pd.state = 'knocked'; pd.script = null; pd.timer = 2.8; pd.slide = v(vx * 0.35, vz * 0.35); pd.pose = POSES.sit; sfx('oof', 1); }
+const _pedRoot = new THREE.Matrix4(), _pedQ = new THREE.Quaternion(), _pedE = new THREE.Euler(), _pedOut = {}; for (const p of PART_LIST) _pedOut[p] = new THREE.Matrix4();
+function renderPeds(alpha) {
+  const peds = W.peds; if (!peds) return;
+  let n = 0;
+  for (const pd of peds.list) {
+    if (!pd.active) continue;
+    const x = lerp(pd.px, pd.x, alpha), z = lerp(pd.pz, pd.z, alpha), h = pd.ph + wrapAngle(pd.heading - pd.ph) * alpha;
+    let pose = pd.pose;
+    if (!pose) { const s = Math.sin(pd.phase), c = Math.cos(pd.phase), amp = pd.moving ? 1 : 0.05; pose = { spine: [0.03, 0, 0], hipL: [-0.45 * s * amp, 0, 0.03], hipR: [0.45 * s * amp, 0, -0.03], knL: [Math.max(0, -c) * 0.7 * amp, 0, 0], knR: [Math.max(0, c) * 0.7 * amp, 0, 0], shL: [0.35 * s * amp, 0, 0.08], shR: [-0.35 * s * amp, 0, -0.08], elL: [-0.25, 0, 0], elR: [-0.25, 0, 0] }; }
+    _pedQ.setFromEuler(_pedE.set(0, h, 0)); _pedRoot.compose(_jv.set(x, W.surface.height(x, z), z), _pedQ, _js.set(1, 1, 1));
+    solveFK(pd.k, pose, _pedRoot, _pedOut, pd.hairBox);
+    for (const part of PART_LIST) peds.im[part].setMatrixAt(pd.id, _pedOut[part]);
+    n = Math.max(n, pd.id + 1);
+  }
+  for (const part of PART_LIST) { const im = peds.im[part]; im.count = n; im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true; }
+}
+function hidePed(pd) { pd.active = false; const z = new THREE.Matrix4().makeScale(0, 0, 0); for (const part of PART_LIST) W.peds.im[part].setMatrixAt(pd.id, z); }
+function collidePeds(P) {
+  const b = P.bike, f = bikeFwd(b), sp = Math.hypot(b.vx, b.vz), minD = TUNING.bikeRadius + 0.28;
+  for (const pd of W.peds.list) {
+    if (!pd.active || pd.state === 'knocked' || pd.ghost) continue;
+    const dx = pd.x - b.x, dz = pd.z - b.z; if (dx * dx + dz * dz > 9) continue;
+    let best = Infinity, bx = 0, bz = 0;
+    for (const o of CAPSULE) { const cx = b.x + f.x * o, cz = b.z + f.z * o, d = Math.hypot(pd.x - cx, pd.z - cz); if (d < best) { best = d; bx = cx; bz = cz; } }
+    if (best < minD) {
+      if (sp > 2.5) { knockPed(pd, b.vx, b.vz); crash(P, 'ped', null); P.events.push('hitPed'); return; }
+      const nx = (pd.x - bx) / (best || 1), nz = (pd.z - bz) / (best || 1); pd.x += nx * (minD - best); pd.z += nz * (minD - best); b.vx *= 0.6; b.vz *= 0.6;
+    } else if (best - minD < TUNING.nearMissDist && sp > TUNING.nearMissMinKmh * KMH && pd.moving && W.time - pd.nearT > 3) { pd.nearT = W.time; nearMiss(P, 'pedestrian'); }
+  }
+}
+function spawnScriptPed(outfit, x, z, heading, script) {
+  const peds = W.peds, R = W.rng.fx;
+  let pd = peds.list.find(p => !p.active && p.reusable);
+  if (!pd) { if (peds.list.length >= PED_MAX) return null; pd = makePed(peds, R, outfit in OUTFITS ? outfit : 'pedA'); }
+  else { const o = { ...OUTFITS[outfit] }; pd.outfit = o; PART_LIST.forEach(part => peds.im[part].setColorAt(pd.id, M(partColour(o, part)).color)); }
+  Object.assign(pd, { x, z, px: x, pz: z, heading, ph: heading, active: true, script, state: 'script', pose: null, reusable: true, ghost: false, side: 0 });
+  return pd;
+}
+
+// @@SECTION12@@
+// ===================================================================================
+// 14. SHIFT AND APP
+// ===================================================================================
+// ---- scoring: the multiplier builds from near misses and clean lines, banks only at drop-off ----
+function popup(text, cls = '') { const d = document.createElement('div'); d.className = 'pop'; if (cls === 'bad') d.style.color = 'var(--bad)'; if (cls === 'good') d.style.color = 'var(--good)'; d.textContent = text; const host = document.getElementById('popups'); host.appendChild(d); while (host.children.length > 3) host.firstChild.remove(); setTimeout(() => d.remove(), 1100); }
+function addChain(P, label) {
+  const ch = P.chain; ch.count++; ch.mult = Math.min(TUNING.multMax, 1 + ch.count * TUNING.multStep); ch.points += Math.round(10 * ch.mult);
+  ch.best = Math.max(ch.best, ch.mult); P.stats.bestChain = Math.max(P.stats.bestChain, ch.mult);
+  popup(`${label}  ×${ch.mult.toFixed(1)}`); sfx('chain', ch.count);
+}
+function nearMiss(P, what) { P.stats.nearMisses++; addChain(P, what === 'car' ? 'NEAR MISS' : 'CLOSE SHAVE'); }
+function breakCleanLine(P) { P.chain.cleanT = 0; }
+function clearChain(P, why) { const ch = P.chain; if (ch.count > 0 && why === 'crash') popup('CHAIN LOST', 'bad'); ch.mult = 1; ch.points = 0; ch.count = 0; ch.cleanT = 0; }
+function updateScoring(P, dt) {
+  const b = P.bike, ch = P.chain; if (b.state !== 'ride' || P.onFoot) return;
+  const sp = Math.hypot(b.vx, b.vz);
+  if ((b.surf === 1 || b.surf === 4) && sp > TUNING.cleanLineMinKmh * KMH && b.skid < 0.2 && W.time - b.lastHit > 1) ch.cleanT += dt; else if (b.surf === 2 || sp < 2) ch.cleanT = 0;
+  if (ch.cleanT > TUNING.cleanLineSeconds) { ch.cleanT = 0; addChain(P, 'CLEAN LINE'); }
+}
+
+// @@SECTION14@@
 // @@STUBS_BEGIN@@ (temporary: replaced by real sections in later delivery steps)
-function collideDynamic() {}
-function breakCleanLine() {}
 function sfx() {}
 function updateFootCamera() {}
-function clearChain(P) { P.chain.mult = 1; P.chain.points = 0; P.chain.count = 0; }
 // @@STUBS_END@@
 
 // ===================================================================================
@@ -2130,11 +2456,14 @@ function tick(dt) {
     if (P.bike.state === 'ride') updateBike(P, dt);
     else if (P.bike.state === 'crash') updateCrash(P, dt);
     updateCargo(P, dt);
+    updateScoring(P, dt);
     P.events.length = 0;
   }
+  updateSignals(dt); updateTraffic(dt); updatePeds(dt);
 }
 function updateHUD(P) {
   ui('spd').textContent = Math.round(Math.hypot(P.bike.vx, P.bike.vz) * 3.6);
+  ui('mult').textContent = '×' + P.chain.mult.toFixed(1); ui('chain').textContent = P.chain.count ? `chain ${P.chain.count} · ${P.chain.points} pts unbanked` : 'chain 0';
   const c = P.cargo; ui('cargoBox').style.display = c ? 'block' : 'none';
   if (c) { ui('cargoName').textContent = c.def.name; ui('cargoIco').textContent = c.def.icon; ui('cargoState').textContent = CARGO_STATE_NAMES[c.state]; ui('cargoState').style.color = ['var(--good)', 'var(--warn)', 'var(--bad)'][c.state];
     const bar = ui('cargoBar'); bar.style.width = c.abuse.toFixed(0) + '%'; bar.style.background = ['var(--good)', 'var(--warn)', 'var(--bad)'][c.state]; ui('cargoBox').style.transform = c.flash > 0 ? `scale(${1 + c.flash * 0.15})` : ''; }
@@ -2155,6 +2484,7 @@ function frame(now) {
   const alpha = clamp(acc / DT, 0, 1);
   updateFade(dtReal); fx.flash = Math.max(0, fx.flash - dtReal * 2);
   if (P.bike.state === 'crash') renderCrash(P); else renderBike(P, alpha);
+  renderTraffic(alpha); renderPeds(alpha);
   updateCamera(P, alpha, dtReal);
   updateSun(P.bike.x, P.bike.z);
   renderFrame(W.scene);
