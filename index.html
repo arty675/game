@@ -127,6 +127,17 @@ import * as THREE from 'three';
    4 street graph & generation · 5 world build · 6 bike · 7 camera & post-process ·
    8 crash · 9 cargo · 10 traffic · 11 pedestrians · 12 situation director ·
    13 interiors · 14 shift & app · 15 HUD · 16 debug · 17 main loop
+   HOW TO EXTEND
+   · Swap a greybox mesh: replace that MODULES entry's build() body with a loaded mesh (return a Group
+     in the same local frame and size). place(), batching, colliders (col) and the audit stay as they are.
+     Static plain-colour meshes are merged into vertex-coloured chunks; textured materials pass through.
+   · Add a situation: push a card into SITUATIONS (section 12) with prerequisites(ctx) and run(ctx)
+     returning { update(dt) → outcome|null, cleanup() }; triggers: ambient, crash, accept, enterBuilding,
+     offer, shiftStart. Use W.rng.director / W.rng.fx — never Math.random().
+   · Tune feel: every number is in TUNING_SPEC (section 1); F2 edits live, "Copy TUNING as JSON" exports.
+   · Audit: F1 → "Module names" labels placements (white = sheet/brief size, cyan = proposed), "Dimension
+     audit" rebuilds every module and compares measured bounds with the declared size.
+   · Tests: window.__game.sim(seconds) advances the fixed-step simulation synchronously.
    Coordinate convention (Three.js, Y up): world +X east, +Z south, -Z north, metres.
    Module local frame = Blender sheet frame exported to glTF: X right, Y up (sheet Z),
    +Z out of the facade / vehicle front (sheet -Y). Facade modules: origin bottom-left
@@ -1376,7 +1387,8 @@ function genParked(W, L, R) {
       const [id] = R.weighted(PARKED_TYPES, x => x[1]), def = MODULES[id], len = def.d;
       const sc = s + len / 2, q = vat(r.start, r.u, sc, r.r, b.oc + (b.o0 < 0 ? -0.15 : 0.15));
       if (sc + len / 2 > ps.s1) break;
-      const nearHydrant = W.hydrants.some(h => Math.hypot(h.x - q.x, h.z - q.z) < 4.5) || (ps.reserved && sc + len / 2 > ps.reserved[0] && sc - len / 2 < ps.reserved[1]);
+      const nearHydrant = W.hydrants.some(h => Math.hypot(h.x - q.x, h.z - q.z) < 4.5) || (ps.reserved && sc + len / 2 > ps.reserved[0] && sc - len / 2 < ps.reserved[1])
+        || W.alleys.some(al => [al.a, al.b].some(e => Math.abs(vdot(vsub(q, e), r.u)) < len / 2 + 4.5 && Math.abs(vdot(vsub(q, e), r.r)) < 14)); // keep alley mouths clear
       if (!nearHydrant && R.chance(0.78)) {
         place(id, {}, q.x, Y_ROAD, q.z, yawCar);
         const fwdCar = vmul(r.u, b.dir > 0 ? 1 : -1);
