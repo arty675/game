@@ -46,7 +46,7 @@ canvas#c{display:block;width:100vw;height:100vh}
 #bubble{position:fixed;z-index:6;pointer-events:none;display:none;max-width:260px;background:#fff;color:#111;border-radius:14px;padding:8px 12px;font-size:16px;transform:translate(-50%,-100%)}
 #bubble:after{content:"";position:absolute;left:50%;bottom:-9px;border:9px solid transparent;border-top-color:#fff;border-bottom:0;margin-left:-9px}
 #bubble i{display:block;color:#666;font-size:12px;margin-top:3px}
-#tipCard{left:50%;top:22%;transform:translateX(-50%);display:none;text-align:center;min-width:240px}
+#tipCard{right:16px;top:48px;display:none;text-align:center;min-width:250px}
 #tipCard .amt{font-size:46px;font-weight:800;color:var(--good);font-variant-numeric:tabular-nums}
 #tipCard .sub{color:var(--dim)}
 .overlay{position:fixed;inset:0;z-index:9;display:none;align-items:center;justify-content:center;background:rgba(8,9,10,.72);pointer-events:auto}
@@ -846,7 +846,8 @@ function intWall(g, x0, x1, holes = []) { // face at z=0, thickness to -z, two-t
   B(g, 'Skirting', x0, 0, 0, x1, 0.1, 0.015);
 }
 const INTK = { sheet: '03B', spec: 'sheet', origin: 'BLE' };
-def('INT_WallStraight', { ...INTK, w: 2.0, h: INT_H, d: INT_T, mat: 'Interior', build() { const g = G(); intWall(g, 0, 2); return g; } });
+// params.w: the sheet module is 2.00 m; the stairwell (3.52 deep) needs cut lengths, flagged as cuts in the audit
+def('INT_WallStraight', { ...INTK, w: 2.0, h: INT_H, d: INT_T, mat: 'Interior', params: { w: 2.0 }, build(p) { const g = G(); intWall(g, 0, p.w); return g; } });
 def('INT_WallCornerL', { ...INTK, origin: 'CORNER', w: 2.0, h: INT_H, d: 2.0, mat: 'Interior', build() { const g = G(); const a = G(); intWall(a, 0, 2); a.position.x = -2; g.add(a); const b = G(); intWall(b, 0, 2); b.rotation.y = Math.PI / 2; b.position.set(0, 0, 0); g.add(b); return g; } });
 def('INT_FloorSlab', { ...INTK, origin: 'CF', w: 2.0, h: 0.15, d: 2.0, mat: 'Floor', build() { const g = G(); B(g, 'Floor', -1, -0.15, -1, 1, 0, 1); return g; } });
 def('INT_CeilingSlab', { ...INTK, origin: 'CF', w: 2.0, h: 0.15, d: 2.0, mat: 'Interior', build() { const g = G(); B(g, 'Interior', -1, 0, -1, 1, 0.15, 1); return g; } });
@@ -2361,6 +2362,217 @@ function spawnScriptPed(outfit, x, z, heading, script) {
 
 // @@SECTION12@@
 // ===================================================================================
+// 13. INTERIORS — built from the 03B kit on entry: vestibule → corridor → stairs or lift →
+//     floor corridor with numbered doors. On-foot WASD. Corridor axis = +X, clear width 2.00,
+//     floor-to-floor 3.00, lift at x 11.4–13.4, dogleg stair at x 13.4–16.92.
+// ===================================================================================
+const INT = { scene: null, cols: [], doors: [], placements: [], lift: null, floors: 0 };
+function labelTexture(text, w = 128, h = 64, bg = '#d8c27a', fg = '#1b1c1e') {
+  const c = document.createElement('canvas'); c.width = w; c.height = h; const g = c.getContext('2d');
+  g.fillStyle = bg; g.fillRect(0, 0, w, h); g.fillStyle = fg; g.font = `bold ${Math.floor(h * 0.7)}px ui-monospace, Menlo, monospace`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(text, w / 2, h / 2 + 2);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
+}
+function buildInterior(P, bld, order, flags) {
+  if (INT.scene) INT.scene.traverse(o => { if (o.geometry && o.geometry !== UNIT_BOX && !GEO_CACHE_SET.has(o.geometry)) o.geometry.dispose(); if (o.material && o.material.map) o.material.map.dispose(); });
+  const scene = new THREE.Scene(); scene.background = new THREE.Color(0x15130f);
+  scene.add(new THREE.HemisphereLight(0xfff4e2, 0x51463a, 1.9)); const dl = new THREE.DirectionalLight(0xffffff, 0.7); dl.position.set(3, 10, 2); scene.add(dl);
+  const N = bld.storeys, batch = new Batcher(Infinity), cols = [], doors = [], plc = [];
+  const R = new RNG(game.seed + '|interior|' + order.offer.id);
+  const put = (id, prm, x, y, z, rot = 0, dynamic = false) => {
+    const def = MODULES[id], pr = { ...(def.params || {}), ...prm }, g = def.build(pr); g.position.set(x, y, z); g.rotation.y = rot; g.updateMatrixWorld(true);
+    plc.push({ id, x, y, z, rotY: rot, prm: pr, spec: def.spec, sheet: def.sheet, w: dimOf(def.w, pr, 'w'), h: dimOf(def.h, pr, 'h'), d: dimOf(def.d, pr, 'd') });
+    if (dynamic) scene.add(g); else batch.add(g, true); return g;
+  };
+  const wall = (x0, z0, x1, z1, y0, y1) => cols.push([Math.min(x0, x1), Math.min(z0, z1), Math.max(x0, x1), Math.max(z0, z1), y0, y1]);
+  // labels: true floor numbers, or shuffled (scrambled_floors)
+  const floorLabel = []; for (let k = 0; k < N; k++) floorLabel.push(String(k + 1));
+  if (flags.scrambled) R.shuffle(floorLabel);
+  const target = order.offer.apt, realLevel = order.offer.floor - 1, realLetter = order.offer.letter;
+  const slots = []; for (let k = 1; k < N; k++) for (const L of APT_LETTERS) slots.push({ k, L, label: (k + 1) + L });
+  if (flags.scrambled) {
+    const others = slots.filter(s => !(s.k === realLevel && s.L === realLetter)), decoys = R.shuffle(others.slice()).slice(0, Math.min(2, others.length));
+    const pool = R.shuffle(slots.map(s => s.label).filter(l => l !== target));
+    for (const s of slots) s.label = s.k === realLevel && s.L === realLetter || decoys.includes(s) ? target : pool.pop() || '?';
+  }
+  for (let k = 0; k < N; k++) {
+    const y = k * FLOOR_TO_FLOOR, top = y + INT_H;
+    if (k === 0) { put('INT_Vestibule', {}, 0, 0, 0); put('INT_MailboxBank', {}, 2.6, 0.9, 1.0, Math.PI); put('INT_BuzzerPanel', {}, 0.5, 1.3, -1.0); wall(0, -1.2, 3.4, -1.0, y, top); wall(0, 1.0, 3.4, 1.2, y, top); wall(-0.2, -1.2, 0.2, 1.2, y, top); }
+    else { put('INT_WallStraight', {}, 3.4, y, 1.0, Math.PI / 2); wall(3.2, -1.2, 3.4, 1.2, y, top); }
+    for (let x = 3.4; x < 13.4 - 1e-6; x += 2) {
+      put('INT_FloorSlab', {}, x + 1, y, 0); put('INT_CeilingSlab', {}, x + 1, top, 0); put('INT_CeilingLight', {}, x + 1, top, 0);
+      const sec = Math.round((x - 3.4) / 2);
+      if (k > 0 && sec < 3) {
+        const g = put('INT_DoorModule', {}, x, y, -1.0, 0, true), slot = slots.find(s => s.k === k && s.L === APT_LETTERS[sec]);
+        const plate = new THREE.Mesh(new THREE.PlaneGeometry(0.15, 0.08), new THREE.MeshBasicMaterial({ map: labelTexture(slot.label) })); plate.position.set(0.5, 1.59, 0.026); g.userData.leaf.add(plate);
+        put('INT_Doormat', {}, x + 1, y + 0.001, -0.6, 0, false);
+        doors.push({ k, letter: APT_LETTERS[sec], label: slot.label, real: k === realLevel && APT_LETTERS[sec] === realLetter, x: x + 1, z: -1.0, y, g, leaf: g.userData.leaf, open: 0, openTarget: 0 });
+      } else { put('INT_WallStraight', {}, x, y, -1.0); if (sec === 3) put('INT_Radiator', {}, x + 0.6, y + 0.0, -1.0); }
+      if (x < 11.3) put('INT_WallStraight', {}, x + 2, y, 1.0, Math.PI);
+      else { const lg = put('INT_Lift', {}, x + 2, y, 1.0, Math.PI, true); if (k === 0) INT.liftDoors = []; (INT.liftDoors ||= []).push(lg.userData.doors); }
+    }
+    wall(3.4, -1.2, 13.4, -1.0, y, top); wall(3.4, 1.0, 11.8, 1.2, y, top); wall(13.0, 1.0, 13.4, 1.2, y, top);
+    wall(11.7, 1.2, 11.8, 3.0, y, top); wall(13.0, 1.2, 13.1, 3.0, y, top); wall(11.7, 2.8, 13.1, 3.0, y, top);
+    // stairwell
+    put('INT_StairDogleg', {}, 13.4, y, 1.1);
+    put('INT_WallStraight', { w: 2.0 }, 13.4, y, -1.1); put('INT_WallStraight', { w: 1.52 }, 15.4, y, -1.1);
+    put('INT_WallStraight', { w: 2.0 }, 16.92, y, 1.1, Math.PI); put('INT_WallStraight', { w: 1.52 }, 14.92, y, 1.1, Math.PI);
+    put('INT_WallStraight', { w: 2.2 }, 16.92, y, -1.1, -Math.PI / 2);
+    wall(13.4, -1.3, 16.92, -1.1, y, y + 3); wall(13.4, 1.1, 16.92, 1.3, y, y + 3); wall(16.92, -1.3, 17.12, 1.3, y, y + 3); wall(13.4, -0.1, 15.92, 0.1, y, y + 3);
+    if (k === N - 1) { wall(13.4, -1.1, 13.7, -0.1, y, y + 3); put('INT_Handrail', {}, 13.5, y + 0.9, -0.1, Math.PI / 2); }
+    if (k === 0) wall(13.4, 0.1, 15.92, 1.1, y, y + 1.4);   // no walking under the first upper flight
+    // floor sign (real or scrambled)
+    const sign = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 0.36), new THREE.MeshBasicMaterial({ map: labelTexture(floorLabel[k], 128, 92, '#2e5a4a', '#f2efe6') })); sign.position.set(12.4, y + 2.25, 0.98); sign.rotation.y = Math.PI; scene.add(sign);
+    const sign2 = sign.clone(); sign2.position.set(4.2, y + 1.9, 0.98); scene.add(sign2);
+  }
+  const statics = G(); batch.build(statics, BATCH_MAT); scene.add(statics);
+  Object.assign(INT, { scene, cols, doors, placements: plc, floors: N, flags, order, bld, floorLabel });
+}
+// walkable height: floor levels, plus the two stair flights and the landing (choose the level nearest the current y)
+function interiorHeight(x, z, yNow) {
+  let best = null;
+  for (let k = 0; k < INT.floors; k++) {
+    const y0 = k * FLOOR_TO_FLOOR; let h = y0;
+    if (x > 13.4 && x < 16.92 && Math.abs(z) < 1.1) { h = x >= 15.92 ? y0 + 1.5 : z < 0 ? y0 + 1.5 * (x - 13.4) / 2.52 : y0 + 1.5 + 1.5 * (15.92 - x) / 2.52; if (k === INT.floors - 1 && z < 0 && x < 15.92) h = y0; }
+    if (!best || Math.abs(h - yNow) < Math.abs(best - yNow)) best = h;
+  }
+  return best;
+}
+function enterBuilding(P) {
+  const o = P.order; if (P.entering) return; P.entering = true;
+  fadeTo(() => {
+    P.entering = false;
+    const flags = W.director ? W.director.onEnterBuilding(P, o) : {};
+    buildInterior(P, o.offer.bld, o, flags);
+    P.onFoot = { x: 1.0, z: 0, y: 0, yaw: Math.PI / 2, pitch: -0.05, px: 1, pz: 0, py: 0, streetPos: { x: P.bike.x, z: P.bike.z }, prompt: '', knocked: new Set(), phase: 'walk', t: 0, enteredT: W.shift.t };
+    if (P.cargo) { P.cargo.group.removeFromParent(); P.cargo.group.position.set(0.16, -0.42, -0.55); P.cargo.group.rotation.set(0.3, 0.4, 0); P.cargo.group.scale.setScalar(0.9); camera.add(P.cargo.group); INT.scene.add(camera); }
+    if (flags.scrambled) appNotify('Heads up: floor numbering in this building is "creative".');
+    if (flags.oddOnly) appNotify('Building notice: lift serves odd floors only. Stairs build character.');
+    sfx('door');
+  }, 0.25, 0.3);
+}
+function exitBuilding(P) {
+  if (!P.onFoot || P.onFoot.exiting) return; P.onFoot.exiting = true;
+  fadeTo(() => {
+    const bld = INT.bld, e = bld.entrance;
+    if (P.cargo) { P.cargo.group.removeFromParent(); P.cargo.group.scale.setScalar(1); P.cargoAnchor.add(P.cargo.group); P.cargo.group.position.set(0, 0, 0); P.cargo.group.rotation.set(0, 0, 0); }
+    camera.removeFromParent();
+    if (INT.customer) { INT.customer.removeFromParent(); INT.customer = null; }
+    P.onFoot = null; hideBubble(); ui('liftUI').style.display = 'none';
+    const ap = vadd(e.approach, vmul(e.nOut, 0.6));
+    placeBike(P, ap.x, ap.z, yawOf(e.dF));
+    sfx('door');
+  }, 0.25, 0.35);
+}
+function interiorCollide(F) {
+  const r = 0.25;
+  for (const c of INT.cols) {
+    if (c[5] < F.y + 0.3 || c[4] > F.y + 1.7) continue;
+    const qx = clamp(F.x, c[0], c[2]), qz = clamp(F.z, c[1], c[3]), dx = F.x - qx, dz = F.z - qz, d2 = dx * dx + dz * dz;
+    if (d2 < r * r) { if (d2 > 1e-10) { const d = Math.sqrt(d2); F.x += dx / d * (r - d); F.z += dz / d * (r - d); } else { F.x = F.px; F.z = F.pz; } }
+  }
+}
+function updateOnFoot(P, dt) {
+  const F = P.onFoot, k = c => KEYS.has(c); F.px = F.x; F.pz = F.z; F.py = F.y; F.t += dt;
+  if (F.phase === 'handover') return updateHandover(P, dt);
+  if (F.phase === 'lift') return;
+  const turn = (k('KeyA') || k('ArrowLeft') ? 1 : 0) - (k('KeyD') || k('ArrowRight') ? 1 : 0);
+  const mv = (k('KeyW') || k('ArrowUp') ? 1 : 0) - (k('KeyS') || k('ArrowDown') ? 1 : 0);
+  const pad = navigator.getGamepads ? [...navigator.getGamepads()].find(p => p && p.connected) : null;
+  let t = turn, m = mv; if (pad) { if (Math.abs(pad.axes[0]) > 0.15) t = -pad.axes[0]; if (Math.abs(pad.axes[1]) > 0.15) m = -pad.axes[1]; if ((pad.buttons[7]?.value || 0) > 0.2) m = Math.max(m, pad.buttons[7].value); }
+  F.yaw += t * 2.4 * dt;
+  const sp = TUNING.walkSpeed * (k('ShiftLeft') ? 1.35 : 1);
+  F.x += Math.sin(F.yaw) * m * sp * dt; F.z += Math.cos(F.yaw) * m * sp * dt;
+  interiorCollide(F);
+  const h = interiorHeight(F.x, F.z, F.y); F.y = Math.abs(h - F.y) < 0.6 ? damp(F.y, h, 18, dt) : F.y;
+  // context prompts
+  F.prompt = ''; F.near = null;
+  const level = Math.round(F.y / FLOOR_TO_FLOOR);
+  for (const d of INT.doors) { if (Math.abs(d.y - F.y) > 1 || d.open > 0.5) continue; if (Math.abs(F.x - d.x) < 0.8 && F.z < 0.35) { F.near = d; F.prompt = F.knocked.has(d) ? 'Already knocked here' : `<kbd>E</kbd> knock · plate ${d.label}`; } }
+  if (!F.near && F.x > 11.85 && F.x < 12.95 && F.z > 1.3 && Math.abs(F.y - level * 3) < 0.2) { openLiftUI(P, level); }
+  else if (ui('liftUI').style.display === 'block' && F.phase === 'walk') ui('liftUI').style.display = 'none';
+  if (!F.near && F.x < 0.55 && level === 0) exitBuilding(P);
+  if (!F.near && F.x < 1.4 && level === 0) F.prompt = 'Walk out to leave the building';
+}
+function interiorInteract(P) {
+  const F = P.onFoot; if (!F) return;
+  if (F.phase === 'handover') { if (F.t > 1.6) exitBuilding(P); return; }
+  if (F.phase !== 'walk') return;
+  const d = F.near; if (!d || F.knocked.has(d)) return;
+  F.knocked.add(d); sfx('door');
+  if (d.real) return startHandover(P, d);
+  // wrong door: someone yells through it
+  const line = W.rng.fx.pick([['Nnnope.', 'Wrong door.'], ['Grrbl! Not me!', 'I did not order anything.'], ['Who sent you?!', 'Go away.'], ['Mrrf… 4B? I am 2C.', 'The plate is lying.']]);
+  showBubble(new THREE.Vector3(d.x, d.y + 1.9, d.z + 0.1), line[0], line[1], 2.2); sfx('gibber');
+}
+function openLiftUI(P, level) {
+  const el = ui('liftUI'); if (el.style.display === 'block') return;
+  el.style.display = 'block'; const odd = INT.flags.oddOnly;
+  ui('liftBtns').innerHTML = Array.from({ length: INT.floors }, (_, i) => `<span class="${odd && (i + 1) % 2 === 0 ? 'dead' : ''}">${i + 1}</span>`).join('');
+  INT.liftLevel = level;
+}
+function liftPress(P, n) {
+  const F = P.onFoot; if (!F || ui('liftUI').style.display !== 'block' || F.phase !== 'walk') return;
+  if (n < 1 || n > INT.floors) return;
+  if (INT.flags.oddOnly && n % 2 === 0) { sfx('buzz'); toast('Lift: odd floors only'); return; }
+  const lvl = n - 1; if (lvl === INT.liftLevel) return;
+  F.phase = 'lift'; ui('liftUI').style.display = 'none'; sfx('ding');
+  fadeTo(() => { F.y = lvl * FLOOR_TO_FLOOR; F.py = F.y; F.x = 12.4; F.z = 1.9; F.px = F.x; F.pz = F.z; F.yaw = Math.PI; F.phase = 'walk'; INT.liftLevel = lvl; setTimeout(() => sfx('ding'), 250); }, 0.3, 0.4);
+}
+function startHandover(P, d) {
+  const F = P.onFoot, o = INT.order; F.phase = 'handover'; F.t = 0; F.door = d; d.openTarget = 1;
+  const ids = ['CHR_Customer01', 'CHR_Customer02', 'CHR_Customer03', 'CHR_Customer04', 'CHR_Customer05', 'CHR_Customer06'];
+  const cid = ids[(o.offer.id * 7 + Math.floor(o.offer.bld.c.x)) % 6];
+  const c = MODULES[cid].build(); c.position.set(d.x, d.y, -1.15); c.rotation.y = 0; INT.scene.add(c); INT.customer = c; c.visible = false;
+  INT.placements.push({ id: cid, x: d.x, y: d.y, z: -1.15, rotY: 0, prm: {}, spec: 'sheet', sheet: '03C', w: MODULES[cid].w, h: MODULES[cid].h, d: MODULES[cid].d });
+}
+function updateHandover(P, dt) {
+  const F = P.onFoot, d = F.door, c = INT.customer, o = INT.order;
+  if (F.t > 0.35) c.visible = true;
+  F.prompt = F.t > 1.6 ? '<kbd>E</kbd> leave' : '';
+  if (F.t > 0.35 && F.t < 1.1) c.position.z = lerp(-1.15, -0.85, smooth(0.35, 1.1, F.t));
+  poseCharacter(c, F.t < 1.2 ? POSES.idle : F.t < 2.2 ? POSES.take_bag : POSES.walk_bag);
+  if (F.t > 1.2 && !F.gave) {
+    F.gave = true;
+    if (P.cargo) { P.cargo.group.removeFromParent(); }
+    const st = P.cargo ? P.cargo.state : 2, late = Math.max(0, W.shift.t - (o.acceptT + o.eta));
+    const line = customerLine(o, st, late);
+    showBubble(new THREE.Vector3(c.position.x, d.y + c.userData.k * 1.75 + 0.3, c.position.z), line[0], line[1], 3.4); sfx('gibber');
+    finishDelivery(P);
+  }
+  if (F.t > 6) exitBuilding(P);
+}
+function customerLine(o, st, late) {
+  const cargo = o.offer.cargo, R = W.rng.fx;
+  if (st === 2 && cargo === 'CARGO_GoldfishBag') return ['GERALD?! Grrrbl!', 'That was Gerald.'];
+  if (st === 2 && cargo === 'CARGO_WeddingCake') return ['Wh— the wedding. Blorf.', 'That was the wedding cake.'];
+  if (st === 2) return R.pick([['Wha— Grrbl?!', 'What did you DO?'], ['Mmh. Mush. Mush!', 'This is soup now.']]);
+  if (st === 1) return R.pick([['Squishy? Hmmrf.', 'Is this… squished?'], ['Blorp. Tilty.', 'It is leaning. Like you.']]);
+  if (late > 20) return R.pick([['Tick-tock. Hrrrm.', 'You are late.'], ['Ehh. Finally. Blorb.', 'Took you long enough.']]);
+  return R.pick([['Mmblorf! Thnk.', 'Thanks.'], ['Ooh. Grbl grbl.', 'Oh. Cool.'], ['Yesss. Blep.', 'Perfect. Bye.']]);
+}
+function updateInteriorAnim(dt) {
+  if (!INT.scene) return;
+  for (const d of INT.doors) { d.open = approach(d.open, d.openTarget, dt * 2.5); d.leaf.rotation.y = -d.open * 1.75; }
+}
+function updateFootCamera(P, alpha) {
+  const F = P.onFoot, x = lerp(F.px, F.x, alpha), z = lerp(F.pz, F.z, alpha), y = lerp(F.py, F.y, alpha);
+  camera.position.set(x, y + 1.62, z);
+  let yaw = F.yaw, pitch = F.pitch;
+  if (F.phase === 'handover' && INT.customer && INT.customer.visible) { const c = INT.customer.position, dx = c.x - x, dz = c.z - z; yaw = damp(F.yaw, Math.atan2(dx, dz), 1, 1); pitch = -0.02; }
+  camera.rotation.set(pitch, yaw + Math.PI, 0);
+}
+// speech bubble (DOM) anchored to a world point in the current scene
+const bubbleState = { p: null, until: 0 };
+function showBubble(p, text, translation, dur = 3) { bubbleState.p = p; bubbleState.until = performance.now() + dur * 1000; const b = ui('bubble'); b.innerHTML = `${text}<i>translation: “${translation}”</i>`; b.style.display = 'block'; }
+function hideBubble() { bubbleState.p = null; ui('bubble').style.display = 'none'; }
+function updateBubble() {
+  if (!bubbleState.p) return; if (performance.now() > bubbleState.until) return hideBubble();
+  const v3 = bubbleState.p.clone().project(camera), b = ui('bubble');
+  if (v3.z > 1) { b.style.display = 'none'; return; } b.style.display = 'block';
+  b.style.left = ((v3.x + 1) / 2 * innerWidth) + 'px'; b.style.top = ((1 - v3.y) / 2 * innerHeight) + 'px';
+}
+
+// ===================================================================================
 // 14. SHIFT AND APP
 // ===================================================================================
 // ---- scoring: the multiplier builds from near misses and clean lines, banks only at drop-off ----
@@ -2758,6 +2970,8 @@ addEventListener('keydown', e => {
   if (e.code === 'F2') { const t = ui('tuning'); t.style.display = t.style.display === 'block' ? 'none' : 'block'; return; }
   if (e.code === 'Enter' && game.mode === 'title') { beginShift(); return; }
   if (game.mode === 'receipt') return;
+  if (/^Digit[1-9]$/.test(e.code) && players[0].onFoot) { liftPress(players[0], +e.code.slice(5)); return; }
+  if (e.code === 'Escape' && players[0].onFoot && ui('liftUI').style.display === 'block') { ui('liftUI').style.display = 'none'; return; }
   if (map[e.code] && game.mode !== 'title') onAction(map[e.code]);
 });
 addEventListener('keyup', e => KEYS.delete(e.code));
@@ -2769,14 +2983,13 @@ function beginShift() {
   const P = players[0]; P.order = null; P.offer = null; P.declines = 0; unloadCargo(P); clearChain(P, 'start'); Object.assign(P.stats, { orders: 0, tips: 0, pay: 0, bonus: 0, crashes: 0, bestChain: 1, nearMisses: 0 });
   appNotify('Shift started. Accept offers with E. Be nice to the cake.');
 }
-// temporary drop-off until section 13 (interiors) lands
-function enterBuilding(P) { finishDelivery(P); }
-function interiorInteract() {}
+
 function tick(dt) {
   W.time += dt;
   for (const P of players) {
     snapshotBike(P.bike);
-    if (P.bike.state === 'ride') updateBike(P, dt);
+    if (P.onFoot) updateOnFoot(P, dt);
+    else if (P.bike.state === 'ride') updateBike(P, dt);
     else if (P.bike.state === 'crash') updateCrash(P, dt);
     updateCargo(P, dt);
     updateScoring(P, dt);
@@ -2803,7 +3016,9 @@ function frame(now) {
   renderTraffic(alpha); renderPeds(alpha);
   updateCamera(P, alpha, dtReal);
   updateSun(P.bike.x, P.bike.z);
-  renderFrame(W.scene);
+  updateInteriorAnim(dtReal);
+  renderFrame(P.onFoot && INT.scene ? INT.scene : W.scene);
+  updateBubble();
   updateHUD(P, dtReal); updateAudio(P, dtReal);
 }
 function boot() {
