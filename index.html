@@ -423,20 +423,20 @@ def('BK_T_Cornice1', { ...ROOFEDGE, w: 1, h: 0.6, d: WALL_T, proj: 0.4, mat: 'M_
 // corner block: origin at the exterior corner point, walls run to -X and -Z, projection to +X/+Z
 def('BK_T_CorniceCorner', { ...ROOFEDGE, origin: 'CORNER', w: 0.7, h: 0.6, d: 0.7, mat: 'M_Trim', build() {
   const g = G(); B(g, 'M_Trim', -0.3, 0, -0.3, 0.12, 0.18, 0.12); B(g, 'M_Trim', -0.3, 0.18, -0.3, 0.22, 0.42, 0.22); B(g, 'M_Trim', -0.3, 0.42, -0.3, 0.4, 0.6, 0.4); return g; } });
-def('BK_T_Parapet4', { ...ROOFEDGE, w: 4, h: 1.4, d: WALL_T, proj: 0.04, mat: 'M_Brick', build() { const g = G(); parapet(g, 4); return g; } });
-def('BK_T_Parapet2', { ...ROOFEDGE, w: 2, h: 1.4, d: WALL_T, proj: 0.04, mat: 'M_Brick', build() { const g = G(); parapet(g, 2); return g; } });
-def('BK_T_Parapet1', { ...ROOFEDGE, w: 1, h: 1.4, d: WALL_T, proj: 0.04, mat: 'M_Brick', build() { const g = G(); parapet(g, 1); return g; } });
+def('BK_T_Parapet4', { ...ROOFEDGE, w: 4, h: 1.4, d: WALL_T, proj: 0.08, mat: 'M_Brick', build() { const g = G(); parapet(g, 4); return g; } });
+def('BK_T_Parapet2', { ...ROOFEDGE, w: 2, h: 1.4, d: WALL_T, proj: 0.08, mat: 'M_Brick', build() { const g = G(); parapet(g, 2); return g; } });
+def('BK_T_Parapet1', { ...ROOFEDGE, w: 1, h: 1.4, d: WALL_T, proj: 0.08, mat: 'M_Brick', build() { const g = G(); parapet(g, 1); return g; } });
 def('BK_T_ParapetPost', { ...ROOFEDGE, origin: 'CF', w: 0.52, h: 1.5, d: 0.52, mat: 'M_Brick', build() { const g = G(); B(g, 'M_Brick', -0.225, 0, -0.225, 0.225, 1.42, 0.225); B(g, 'M_Stone', -0.26, 1.42, -0.26, 0.26, 1.5, 0.26); return g; } });
 
 // ---------- 01C corners ----------
-def('BK_C_Column', { sheet: '01C', spec: 'brief', w: 0.6, d: 0.6, h: 'param', mat: 'M_Stone', params: { h: 13 }, build(p) { const g = G(); B(g, 'M_Stone', -0.3, 0, -0.3, 0.3, p.h, 0.3); B(g, 'M_Stone', -0.32, FLOOR_G - 0.25, -0.32, 0.32, FLOOR_G, 0.32); return g; } });
+def('BK_C_Column', { sheet: '01C', spec: 'brief', w: 0.6, d: 0.6, h: 'param', mat: 'M_Stone', params: { h: 13 }, build(p) { const g = G(); B(g, 'M_Stone', -0.3, 0, -0.3, 0.3, p.h, 0.3); B(g, 'M_Trim', -0.3, FLOOR_G - 0.25, -0.3, 0.3, FLOOR_G, 0.3); return g; } });
 def('BK_C_ColumnOct', { sheet: '01C', spec: 'brief', w: 0.8, d: 0.8, h: 'param', mat: 'M_Stone', params: { h: 13 }, build(p) { const g = G(); const m = C(g, 'M_Stone', 0, 0, 0, 0.4 / Math.cos(Math.PI / 8), p.h, 8); m.rotation.y = Math.PI / 8; return g; } });
 def('BK_C_Seam', { sheet: '01C', spec: 'brief', origin: 'BLE', w: 0.15, d: WALL_T, proj: 0.06, h: 'param', mat: 'M_Stone', params: { h: 13 }, build(p) { const g = G(); B(g, 'M_Stone', 0, 0, -WALL_T, 0.15, p.h, 0.06); return g; } });
 
 // ---------- 02A fire escapes (3 m rise within 4 m, platform depth 1.00) and signals ----------
 function feRail(g, x0, x1) {
   B(g, 'M_Metal', x0, -0.06, 0, x1, 0, 1.0);
-  for (let x = x0; x <= x1 + 1e-3; x += (x1 - x0) / Math.round((x1 - x0) / 1)) B(g, 'M_Metal', x - 0.02, 0, 0.96, x + 0.02, 1.0, 1.0);
+  for (let i = 0, n = Math.round(x1 - x0); i <= n; i++) { const x = clamp(x0 + (x1 - x0) * i / n, x0 + 0.02, x1 - 0.02); B(g, 'M_Metal', x - 0.02, 0, 0.96, x + 0.02, 1.0, 1.0); }
   B(g, 'M_Metal', x0, 0.96, 0.96, x1, 1.0, 1.0); B(g, 'M_Metal', x0, 0.5, 0.97, x1, 0.53, 1.0);
   B(g, 'M_Metal', x0, 0.96, 0, x0 + 0.03, 1.0, 1.0); B(g, 'M_Metal', x1 - 0.03, 0.96, 0, x1, 1.0, 1.0);
   T(g, 'M_Metal', [x0 + 0.2, -0.05, 0.95], [x0 + 0.2, -0.65, 0.02], 0.02); T(g, 'M_Metal', [x1 - 0.2, -0.05, 0.95], [x1 - 0.2, -0.65, 0.02], 0.02);
@@ -446,19 +446,19 @@ function feStair(g) {
   BC(g, 'M_Metal', 2.0, 1.5, 0.28, len, 0.12, 0.03, 0, 0, ang); BC(g, 'M_Metal', 2.0, 1.5, 0.82, len, 0.12, 0.03, 0, 0, ang);
   for (let i = 1; i < 10; i++) { const x = 0.4 + 3.2 * i / 10, y = 3 * i / 10; B(g, 'M_Metal', x - 0.11, y - 0.03, 0.3, x + 0.11, y, 0.8); }
 }
-const FE = { sheet: '02A', origin: 'BLE', spec: 'brief', d: 1.0, mat: 'M_Metal' };
+const FE = { sheet: '02A', origin: 'BLE', spec: 'brief', d: 1.0, projY: 0.72, mat: 'M_Metal' };  // platform + its 3 m stair flight + brackets
 def('BK_FE_Platform4W', { ...FE, w: 4, h: 3.0, build() { const g = G(); feRail(g, 0, 4); feStair(g); return g; } });
 def('BK_FE_Platform8', { ...FE, w: 8, h: 3.0, build() { const g = G(); feRail(g, 0, 8); feStair(g); return g; } });
-def('BK_FE_Bottom', { ...FE, w: 0.5, h: 1.8, d: 0.1, build() { const g = G(); B(g, 'M_Metal', 0, -1.8, 0.85, 0.04, 0, 0.89); B(g, 'M_Metal', 0.46, -1.8, 0.85, 0.5, 0, 0.89); for (let y = -1.7; y < 0; y += 0.3) B(g, 'M_Metal', 0, y, 0.86, 0.5, y + 0.03, 0.88); return g; } });
-def('BK_FE_Top', { ...FE, w: 0.5, h: 4.6, d: 1.0, build() { const g = G(); B(g, 'M_Metal', 0, 0, 0.6, 0.04, 4.6, 0.64); B(g, 'M_Metal', 0.46, 0, 0.6, 0.5, 4.6, 0.64); for (let y = 0.3; y < 4.5; y += 0.3) B(g, 'M_Metal', 0, y, 0.61, 0.5, y + 0.03, 0.63); B(g, 'M_Metal', 0, 4.56, -0.4, 0.04, 4.6, 0.64); B(g, 'M_Metal', 0.46, 4.56, -0.4, 0.5, 4.6, 0.64); return g; } });
+def('BK_FE_Bottom', { ...FE, projY: 0, w: 0.5, h: 1.8, d: 0.04, build() { const g = G(); B(g, 'M_Metal', 0, -1.8, 0.85, 0.04, 0, 0.89); B(g, 'M_Metal', 0.46, -1.8, 0.85, 0.5, 0, 0.89); for (let y = -1.7; y < 0; y += 0.3) B(g, 'M_Metal', 0, y, 0.86, 0.5, y + 0.03, 0.88); return g; } });
+def('BK_FE_Top', { ...FE, projY: 0, w: 0.5, h: 4.6, d: 1.04, build() { const g = G(); B(g, 'M_Metal', 0, 0, 0.6, 0.04, 4.6, 0.64); B(g, 'M_Metal', 0.46, 0, 0.6, 0.5, 4.6, 0.64); for (let y = 0.3; y < 4.5; y += 0.3) B(g, 'M_Metal', 0, y, 0.61, 0.5, y + 0.03, 0.63); B(g, 'M_Metal', 0, 4.56, -0.4, 0.04, 4.6, 0.64); B(g, 'M_Metal', 0.46, 4.56, -0.4, 0.5, 4.6, 0.64); return g; } });
 const POLE = [[-0.08, -0.08, 0.08, 0.08, 0, 3]];
-def('ST_PedSignal', { sheet: '02A', spec: 'brief', w: 0.36, d: 0.3, h: 3.0, mat: 'M_Metal', col: POLE, build() {
+def('ST_PedSignal', { sheet: '02A', spec: 'brief', w: 0.34, d: 0.36, h: 3.0, mat: 'M_Metal', col: POLE, build() {
   const g = G(); C(g, 'M_Metal', 0, 0, 0, 0.05, 3.0, 8); B(g, 'M_Metal', -0.17, 2.3, 0.05, 0.17, 2.8, 0.3);
   B(g, 'Black', -0.13, 2.58, 0.3, 0.13, 2.76, 0.31); B(g, 'Black', -0.13, 2.36, 0.3, 0.13, 2.54, 0.31);
   g.userData.lamps = [{ kind: 'walk', pos: [0, 2.45, 0.32] }, { kind: 'dont', pos: [0, 2.67, 0.32] }]; return g; } });
 def('ST_StopSign', { sheet: '02A', spec: 'brief', w: 0.8, d: 0.1, h: 3.0, mat: 'StopRed', col: POLE, build() {
-  const g = G(); C(g, 'M_Metal', 0, 0, 0, 0.035, 2.7, 6);
-  let m = CA(g, 'PaintWhite', 'z', 0, 2.3, 0.04, 0.4, 0.02, 8); m.rotation.y = Math.PI / 8; m = CA(g, 'StopRed', 'z', 0, 2.3, 0.052, 0.37, 0.02, 8); m.rotation.y = Math.PI / 8;
+  const g = G(); C(g, 'M_Metal', 0, 0, 0, 0.035, 3.0, 6);
+  let m = CA(g, 'PaintWhite', 'z', 0, 2.6, 0.04, 0.4 / Math.cos(Math.PI / 8), 0.02, 8); m.rotation.y = Math.PI / 8; m = CA(g, 'StopRed', 'z', 0, 2.6, 0.052, 0.37 / Math.cos(Math.PI / 8), 0.02, 8); m.rotation.y = Math.PI / 8;
   return g; } });
 def('ST_StreetSign', { sheet: '02A', spec: 'brief', w: 0.9, d: 0.9, h: 3.0, mat: 'SignGreen', col: POLE, build() {
   const g = G(); C(g, 'M_Metal', 0, 0, 0, 0.04, 3.0, 6); B(g, 'SignGreen', -0.45, 2.62, -0.01, 0.45, 2.78, 0.01); B(g, 'SignGreen', -0.01, 2.82, -0.45, 0.01, 2.98, 0.45); return g; } });
@@ -468,45 +468,45 @@ const FURN = { sheet: '02B', spec: 'proposed' };
 def('ST_Curb4', { ...FURN, spec: 'sheet', sheet: '04A', origin: 'BLE', w: 4, h: 0.15, d: 0.3, mat: 'Curb', build() { const g = G(); B(g, 'Curb', 0, 0, -0.3, 4, 0.15, 0); return g; } });
 def('ST_Curb1', { ...FURN, spec: 'sheet', sheet: '04A', origin: 'BLE', w: 1, h: 0.15, d: 0.3, mat: 'Curb', build() { const g = G(); B(g, 'Curb', 0, 0, -0.3, 1, 0.15, 0); return g; } });
 // ramp: origin at the curb-face centre, runs back (into the sidewalk) along -Z for 1.80, top drops 0.15 to road level at z=0
-def('ST_CurbRamp', { ...FURN, spec: 'sheet', sheet: '04A', w: 2.0, h: 0.15, d: 1.8, mat: 'Concrete', build() {
+def('ST_CurbRamp', { ...FURN, spec: 'sheet', sheet: '04A', w: 2.0, h: 0.15, projY: 0.09, d: 1.8, mat: 'Concrete', build() {
   const g = G(); const a = Math.atan2(0.15, 1.8), L = Math.hypot(0.15, 1.8);
   BC(g, 'Concrete', 0, -0.075 - 0.04 * Math.cos(a), -0.9, 2.0, 0.08, L, a, 0, 0);
   BC(g, 'Tactile', 0, -0.115, -0.35, 1.2, 0.01, 0.6, a, 0, 0);
   return g; } });
-def('ST_TreePit', { ...FURN, w: 1.2, h: 0.04, d: 1.2, mat: 'Soil', build() { const g = G(); B(g, 'Soil', -0.6, -0.02, -0.6, 0.6, 0.0, 0.6); B(g, 'M_Metal', -0.6, 0, -0.6, 0.6, 0.04, -0.54); B(g, 'M_Metal', -0.6, 0, 0.54, 0.6, 0.04, 0.6); B(g, 'M_Metal', -0.6, 0, -0.54, -0.54, 0.04, 0.54); B(g, 'M_Metal', 0.54, 0, -0.54, 0.6, 0.04, 0.54); return g; } });
-def('ST_Tree', { ...FURN, spec: 'brief', w: 4.2, d: 4.2, h: 'param', mat: 'Foliage', params: { h: 7 }, col: [[-0.18, -0.18, 0.18, 0.18, 0, 3]], build(p) {
+def('ST_TreePit', { ...FURN, w: 1.2, h: 0.04, d: 1.2, mat: 'Soil', build() { const g = G(); B(g, 'Soil', -0.6, 0.0, -0.6, 0.6, 0.02, 0.6); B(g, 'M_Metal', -0.6, 0, -0.6, 0.6, 0.04, -0.54); B(g, 'M_Metal', -0.6, 0, 0.54, 0.6, 0.04, 0.6); B(g, 'M_Metal', -0.6, 0, -0.54, -0.54, 0.04, 0.54); B(g, 'M_Metal', 0.54, 0, -0.54, 0.6, 0.04, 0.54); return g; } });
+def('ST_Tree', { ...FURN, spec: 'brief', w: 3.57, d: 3.57, h: 'param', mat: 'Foliage', params: { h: 7 }, col: [[-0.18, -0.18, 0.18, 0.18, 0, 3]], build(p) {
   const g = G(), h = p.h; C(g, 'Trunk', 0, 0, 0, 0.16, h * 0.45, 7, 0.7);
   blob(g, 'Foliage', 0, h * 0.62, 0, 2.1, h * 0.22, 2.1); blob(g, 'FoliageDark', 0.5, h * 0.8, -0.3, 1.5, h * 0.17, 1.5); blob(g, 'Foliage', -0.4, h * 0.9 - 0.4, 0.4, 1.0, h * 0.11, 1.0);
   return g; } });
-def('ST_FlexPost', { ...FURN, w: 0.12, d: 0.12, h: 1.0, mat: 'PaintWhite', col: [[-0.06, -0.06, 0.06, 0.06, 0, 1]], build() { const g = G(); C(g, 'PaintWhite', 0, 0, 0, 0.06, 1.0, 8); C(g, 'Orange', 0, 0.8, 0, 0.062, 0.08, 8); C(g, 'Black', 0, 0, 0, 0.09, 0.04, 8); return g; } });
+def('ST_FlexPost', { ...FURN, w: 0.18, d: 0.18, h: 1.0, mat: 'PaintWhite', col: [[-0.06, -0.06, 0.06, 0.06, 0, 1]], build() { const g = G(); C(g, 'PaintWhite', 0, 0, 0, 0.06, 1.0, 8); C(g, 'Orange', 0, 0.8, 0, 0.062, 0.08, 8); C(g, 'Black', 0, 0, 0, 0.09, 0.04, 8); return g; } });
 def('ST_LampPost', { ...FURN, spec: 'brief', w: 0.4, d: 0.4, h: 4.5, mat: 'Black', col: [[-0.15, -0.15, 0.15, 0.15, 0, 4.5]], build() {
   const g = G(); C(g, 'Black', 0, 0, 0, 0.2, 0.6, 8, 0.6); C(g, 'Black', 0, 0.6, 0, 0.07, 3.3, 8); C(g, 'Black', 0, 3.9, 0, 0.16, 0.12, 8);
   C(g, 'LampGlow', 0, 4.0, 0, 0.14, 0.34, 8, 1.2); C(g, 'Black', 0, 4.34, 0, 0.2, 0.16, 8, 0.1); return g; } });
-def('ST_LampCobra', { ...FURN, spec: 'brief', w: 0.4, d: 2.3, h: 8.0, mat: 'Steel', col: [[-0.15, -0.15, 0.15, 0.15, 0, 8]], build() {
+def('ST_LampCobra', { ...FURN, spec: 'brief', w: 0.36, d: 2.24, h: 8.0, mat: 'Steel', col: [[-0.15, -0.15, 0.15, 0.15, 0, 8]], build() {
   const g = G(); C(g, 'Steel', 0, 0, 0, 0.14, 7.6, 8, 0.6); T(g, 'Steel', [0, 7.4, 0], [0, 7.9, 1.6], 0.06); B(g, 'Steel', -0.18, 7.82, 1.5, 0.18, 8.0, 2.1); B(g, 'LampGlow', -0.14, 7.78, 1.55, 0.14, 7.82, 2.05); return g; } });
 // traffic signal: params.h mast height (3-5 m), params.arm horizontal arm length toward +X (0 = pole-mounted). Head faces +Z.
-def('ST_TrafficSignal', { ...FURN, spec: 'brief', w: 'param', d: 0.4, h: 'param', mat: 'M_Metal', params: { h: 4.5, arm: 3.5 }, col: [[-0.14, -0.14, 0.14, 0.14, 0, 4]], build(p) {
+def('ST_TrafficSignal', { ...FURN, spec: 'brief', w: 'param', d: 0.37, h: 'param', mat: 'M_Metal', params: { h: 4.5, arm: 3.5 }, col: [[-0.14, -0.14, 0.14, 0.14, 0, 4]], build(p) {
   const g = G(); C(g, 'M_Metal', 0, 0, 0, 0.11, p.h, 8);
   const hx = p.arm, hy = p.arm !== 0 ? p.h - 0.15 : p.h - 1.1;
   if (p.arm !== 0) B(g, 'M_Metal', Math.min(0, p.arm), p.h - 0.15, -0.05, Math.max(0, p.arm), p.h - 0.05, 0.05);
   B(g, 'Black', hx - 0.16, hy - 0.95, -0.12, hx + 0.16, hy, 0.12);
   const lamps = []; ['red', 'amber', 'green'].forEach((k, i) => { const y = hy - 0.18 - i * 0.3; C(g, 'M_Metal', hx, y - 0.12, 0.12, 0.11, 0.0, 8); B(g, 'Black', hx - 0.13, y + 0.1, 0.12, hx + 0.13, y + 0.13, 0.25); lamps.push({ kind: k, pos: [hx, y, 0.13] }); });
   g.userData.lamps = lamps; return g; } });
-def('ST_Hydrant', { ...FURN, w: 0.42, d: 0.3, h: 0.78, mat: 'Hydrant', col: [[-0.18, -0.18, 0.18, 0.18, 0, 0.8]], build() {
+def('ST_Hydrant', { ...FURN, w: 0.42, d: 0.32, h: 0.78, mat: 'Hydrant', col: [[-0.18, -0.18, 0.18, 0.18, 0, 0.8]], build() {
   const g = G(); C(g, 'Hydrant', 0, 0, 0, 0.16, 0.08, 8); C(g, 'Hydrant', 0, 0.08, 0, 0.12, 0.55, 8); C(g, 'Hydrant', 0, 0.63, 0, 0.1, 0.15, 8, 0.4);
   CA(g, 'Hydrant', 'x', 0, 0.45, 0, 0.05, 0.42, 6); CA(g, 'Hydrant', 'z', 0, 0.42, 0.08, 0.06, 0.12, 6); return g; } });
-def('ST_TrashCan', { ...FURN, w: 0.6, d: 0.6, h: 0.9, mat: 'Dumpster', col: [[-0.3, -0.3, 0.3, 0.3, 0, 0.9]], build() { const g = G(); C(g, 'Dumpster', 0, 0, 0, 0.3, 0.86, 10, 1.05); C(g, 'Black', 0, 0.86, 0, 0.3, 0.04, 10); return g; } });
-def('ST_TrashBags', { ...FURN, w: 1.2, d: 0.8, h: 0.6, mat: 'Black', col: [[-0.55, -0.35, 0.55, 0.35, 0, 0.6]], build() { const g = G(); blob(g, 'Black', -0.3, 0.27, 0, 0.3, 0.28, 0.3); blob(g, 'Black', 0.3, 0.25, 0.05, 0.3, 0.26, 0.28); blob(g, 'Rubber', 0.0, 0.45, -0.1, 0.24, 0.17, 0.24); return g; } });
+def('ST_TrashCan', { ...FURN, w: 0.57, d: 0.6, h: 0.9, mat: 'Dumpster', col: [[-0.3, -0.3, 0.3, 0.3, 0, 0.9]], build() { const g = G(); C(g, 'Dumpster', 0, 0, 0, 0.27, 0.86, 10, 1.1); C(g, 'Black', 0, 0.86, 0, 0.3, 0.04, 10); return g; } });
+def('ST_TrashBags', { ...FURN, w: 1.11, d: 0.59, h: 0.57, mat: 'Black', col: [[-0.55, -0.35, 0.55, 0.35, 0, 0.6]], build() { const g = G(); blob(g, 'Black', -0.3, 0.27, 0, 0.3, 0.28, 0.3); blob(g, 'Black', 0.3, 0.25, 0.05, 0.3, 0.26, 0.28); blob(g, 'Rubber', 0.0, 0.45, -0.1, 0.24, 0.17, 0.24); return g; } });
 def('ST_NewsBox', { ...FURN, w: 0.5, d: 0.45, h: 1.1, mat: 'NewsBlue', col: [[-0.25, -0.23, 0.25, 0.23, 0, 1.1]], build() { const g = G(); B(g, 'M_Metal', -0.2, 0, -0.18, 0.2, 0.35, 0.18); B(g, 'NewsBlue', -0.25, 0.35, -0.225, 0.25, 1.1, 0.225); B(g, 'M_Glass', -0.18, 0.75, 0.225, 0.18, 1.0, 0.235); return g; } });
-def('ST_BikeRack', { ...FURN, w: 0.9, d: 0.06, h: 0.9, mat: 'Steel', col: [[-0.45, -0.05, 0.45, 0.05, 0, 0.9]], build() { const g = G(); C(g, 'Steel', -0.4, 0, 0, 0.03, 0.85, 6); C(g, 'Steel', 0.4, 0, 0, 0.03, 0.85, 6); CA(g, 'Steel', 'x', 0, 0.85, 0, 0.03, 0.86, 6); return g; } });
-def('ST_Bench', { ...FURN, w: 1.8, d: 0.65, h: 0.85, mat: 'Wood', col: [[-0.9, -0.32, 0.9, 0.32, 0, 0.85]], build() {
+def('ST_BikeRack', { ...FURN, w: 0.9, d: 0.06, h: 0.9, mat: 'Steel', col: [[-0.45, -0.05, 0.45, 0.05, 0, 0.9]], build() { const g = G(); C(g, 'Steel', -0.42, 0, 0, 0.03, 0.87, 6); C(g, 'Steel', 0.42, 0, 0, 0.03, 0.87, 6); CA(g, 'Steel', 'x', 0, 0.87, 0, 0.03, 0.9, 6); return g; } });
+def('ST_Bench', { ...FURN, w: 1.8, d: 0.57, h: 0.85, mat: 'Wood', col: [[-0.9, -0.32, 0.9, 0.32, 0, 0.85]], build() {
   const g = G(); B(g, 'Wood', -0.9, 0.42, -0.25, 0.9, 0.47, 0.25); B(g, 'Wood', -0.9, 0.55, -0.3, 0.9, 0.85, -0.25);
   for (const x of [-0.75, 0.75]) { B(g, 'Black', x - 0.04, 0, -0.25, x + 0.04, 0.45, 0.25); B(g, 'Black', x - 0.03, 0.45, -0.32, x + 0.03, 0.85, -0.27); } return g; } });
 def('ST_BusShelter', { ...FURN, spec: 'brief', w: 4.0, d: 1.5, h: 2.6, mat: 'M_Metal', col: [[-2, -0.75, 2, -0.62, 0, 2.6], [-2, -0.75, -1.88, 0.75, 0, 2.6], [1.88, -0.75, 2, 0.75, 0, 2.6]], build() {
   const g = G(); for (const x of [-1.95, 1.95]) for (const z of [-0.7, 0.7]) B(g, 'M_Metal', x - 0.05, 0, z - 0.05, x + 0.05, 2.5, z + 0.05);
   B(g, 'M_Metal', -2, 2.5, -0.75, 2, 2.6, 0.75); B(g, 'M_Glass', -1.9, 0.15, -0.72, 1.9, 2.4, -0.68); B(g, 'M_Glass', -1.98, 0.15, -0.65, -1.92, 2.4, 0.6); B(g, 'M_Glass', 1.92, 0.15, -0.65, 1.98, 2.4, 0.6);
   B(g, 'Steel', -1.5, 0.45, -0.6, 1.5, 0.5, -0.35); B(g, 'M_Trim', 1.0, 0.6, -0.68, 1.85, 2.2, -0.64); return g; } });
-def('ST_Manhole', { ...FURN, spec: 'brief', w: 0.9, d: 0.9, h: 0.02, mat: 'M_Metal', build() { const g = G(); C(g, 'M_Metal', 0, 0, 0, 0.45, 0.02, 14); return g; } });
+def('ST_Manhole', { ...FURN, spec: 'brief', w: 0.9, d: 0.9, h: 0.02, mat: 'M_Metal', build() { const g = G(); C(g, 'M_Metal', 0, 0, 0, 0.45, 0.02, 16); return g; } });
 // cellar hatch 1.5 x 1.2, two leaves; params.open 0..1 swings both leaves up (opens)
 def('ST_CellarHatch', { ...FURN, spec: 'brief', w: 1.5, d: 1.2, h: 'param', mat: 'M_Metal', params: { open: 0 }, build(p) {
   const g = G(); B(g, 'Black', -0.75, -0.02, -0.6, 0.75, 0.005, 0.6);
@@ -518,30 +518,30 @@ def('ST_SidewalkShed', { ...FURN, spec: 'brief', origin: 'BLE', w: 4.0, d: 2.5, 
 def('ST_JerseyBarrier', { ...FURN, w: 3.0, d: 0.6, h: 0.81, mat: 'Concrete', col: [[-1.5, -0.3, 1.5, 0.3, 0, 0.81]], build() { const g = G(); B(g, 'Concrete', -1.5, 0, -0.3, 1.5, 0.08, 0.3); B(g, 'Concrete', -1.5, 0.08, -0.25, 1.5, 0.3, 0.25); B(g, 'Concrete', -1.5, 0.3, -0.1, 1.5, 0.81, 0.1); return g; } });
 def('ST_BikeLaneBarrier', { ...FURN, w: 1.8, d: 0.3, h: 0.3, mat: 'Concrete', col: [[-0.9, -0.15, 0.9, 0.15, 0, 0.3]], build() { const g = G(); B(g, 'Concrete', -0.9, 0, -0.15, 0.9, 0.3, 0.15); B(g, 'PaintWhite', -0.9, 0.3, -0.15, 0.9, 0.305, 0.15); return g; } });
 def('ST_Cone', { ...FURN, w: 0.36, d: 0.36, h: 0.7, mat: 'Cone', col: [[-0.15, -0.15, 0.15, 0.15, 0, 0.7]], build() { const g = G(); B(g, 'Cone', -0.18, 0, -0.18, 0.18, 0.04, 0.18); C(g, 'Cone', 0, 0.04, 0, 0.14, 0.66, 8, 0.15); C(g, 'PaintWhite', 0, 0.38, 0, 0.09, 0.1, 8, 0.8); return g; } });
-def('ST_HotDogCart', { ...FURN, w: 1.8, d: 0.9, h: 2.2, mat: 'Steel', col: [[-0.9, -0.45, 0.9, 0.45, 0, 2.2]], build() {
+def('ST_HotDogCart', { ...FURN, w: 1.8, d: 1.8, h: 2.2, mat: 'Steel', col: [[-0.9, -0.45, 0.9, 0.45, 0, 2.2]], build() {
   const g = G(); B(g, 'Steel', -0.8, 0.35, -0.4, 0.8, 1.0, 0.4); B(g, 'M_Trim', -0.8, 1.0, -0.4, 0.8, 1.05, 0.4); CA(g, 'Rubber', 'z', -0.5, 0.25, 0, 0.25, 0.9, 10); B(g, 'Steel', 0.8, 0.8, -0.05, 0.9, 0.85, 0.05);
   C(g, 'Steel', 0, 1.05, 0, 0.025, 1.0, 6); C(g, 'Canvas', 0, 1.95, 0, 0.9, 0.25, 8, 0.05); return g; } });
-def('ST_ParkFence', { ...FURN, origin: 'BLE', w: 2.0, d: 0.06, h: 1.2, mat: 'Fence', col: [[0, -0.05, 2, 0.05, 0, 1.2]], build() {
+def('ST_ParkFence', { ...FURN, origin: 'BLE', w: 2.0, d: 0.08, h: 1.2, mat: 'Fence', col: [[0, -0.05, 2, 0.05, 0, 1.2]], build() {
   const g = G(); B(g, 'Fence', 0, 0.1, -0.03, 2, 0.14, 0.03); B(g, 'Fence', 0, 1.06, -0.03, 2, 1.1, 0.03); for (let x = 0.1; x < 2; x += 0.16) B(g, 'Fence', x - 0.015, 0, -0.015, x + 0.015, 1.2, 0.015); B(g, 'Fence', 0, 0, -0.04, 0.06, 1.2, 0.04); return g; } });
-def('ST_Planter', { ...FURN, w: 1.2, d: 0.6, h: 0.9, mat: 'PlanterC', col: [[-0.6, -0.3, 0.6, 0.3, 0, 0.6]], build() { const g = G(); B(g, 'PlanterC', -0.6, 0, -0.3, 0.6, 0.6, 0.3); blob(g, 'Foliage', 0, 0.68, 0, 0.5, 0.22, 0.26); return g; } });
-def('ST_BackyardFence', { ...FURN, origin: 'BLE', w: 2.0, d: 0.05, h: 1.8, mat: 'Wood', col: [[0, -0.05, 2, 0.05, 0, 1.8]], build() { const g = G(); for (let x = 0; x < 2; x += 0.2) B(g, 'Wood', x + 0.01, 0, -0.025, x + 0.19, 1.8, 0.025); return g; } });
-def('ST_Shed', { ...FURN, w: 2.0, d: 1.5, h: 2.2, mat: 'Wood', col: [[-1, -0.75, 1, 0.75, 0, 2.2]], build() { const g = G(); B(g, 'Wood', -1, 0, -0.75, 1, 1.9, 0.75); BC(g, 'M_Roof', 0, 2.05, 0, 2.2, 0.08, 1.7, 0.18, 0, 0); B(g, 'WoodDark', -0.4, 0, 0.75, 0.4, 1.7, 0.78); return g; } });
-def('ST_Dumpster', { ...FURN, w: 1.8, d: 1.0, h: 1.2, mat: 'Dumpster', col: [[-0.9, -0.5, 0.9, 0.5, 0, 1.2]], build() { const g = G(); B(g, 'Dumpster', -0.9, 0.12, -0.5, 0.9, 1.1, 0.5); BC(g, 'Dumpster', 0, 1.14, 0.0, 1.82, 0.06, 1.04, 0.08, 0, 0); for (const x of [-0.75, 0.75]) for (const z of [-0.4, 0.4]) C(g, 'Rubber', x, 0, z, 0.06, 0.12, 6); return g; } });
+def('ST_Planter', { ...FURN, w: 1.2, d: 0.6, h: 0.87, mat: 'PlanterC', col: [[-0.6, -0.3, 0.6, 0.3, 0, 0.6]], build() { const g = G(); B(g, 'PlanterC', -0.6, 0, -0.3, 0.6, 0.6, 0.3); blob(g, 'Foliage', 0, 0.68, 0, 0.5, 0.22, 0.26); return g; } });
+def('ST_BackyardFence', { ...FURN, origin: 'BLE', w: 2.0, d: 0.05, h: 1.8, mat: 'Wood', col: [[0, -0.05, 2, 0.05, 0, 1.8]], build() { const g = G(); for (let i = 0; i < 10; i++) B(g, 'Wood', i * 0.2 + (i ? 0.01 : 0), 0, -0.025, i * 0.2 + (i === 9 ? 0.2 : 0.19), 1.8, 0.025); return g; } });
+def('ST_Shed', { ...FURN, w: 2.2, d: 1.69, h: 2.24, mat: 'Wood', col: [[-1, -0.75, 1, 0.75, 0, 2.2]], build() { const g = G(); B(g, 'Wood', -1, 0, -0.75, 1, 1.9, 0.75); BC(g, 'M_Roof', 0, 2.05, 0, 2.2, 0.08, 1.7, 0.18, 0, 0); B(g, 'WoodDark', -0.4, 0, 0.75, 0.4, 1.7, 0.78); return g; } });
+def('ST_Dumpster', { ...FURN, w: 1.82, d: 1.04, h: 1.21, mat: 'Dumpster', col: [[-0.9, -0.5, 0.9, 0.5, 0, 1.2]], build() { const g = G(); B(g, 'Dumpster', -0.9, 0.12, -0.5, 0.9, 1.1, 0.5); BC(g, 'Dumpster', 0, 1.14, 0.0, 1.82, 0.06, 1.04, 0.08, 0, 0); for (const x of [-0.75, 0.75]) for (const z of [-0.4, 0.4]) C(g, 'Rubber', x, 0, z, 0.06, 0.12, 6); return g; } });
 
 // ---------- 02C roof props & facade attachments (sheet attached: exact sizes) ----------
 const ROOF = { sheet: '02C', spec: 'sheet' };
 def('RF_StairBulkhead', { ...ROOF, w: 3.0, d: 2.0, h: 2.6, mat: 'M_Brick', col: [[-1.5, -1, 1.5, 1, 0, 2.6]], build() {
-  const g = G(); B(g, 'M_Brick', -1.5, 0, -1, 1.5, 2.45, 1); B(g, 'M_Stone', -1.55, 2.45, -1.05, 1.55, 2.6, 1.05);
-  B(g, 'M_Stone', -1.5, 0, 0.98, -1.25, 2.45, 1.02); B(g, 'M_Stone', 1.25, 0, 0.98, 1.5, 2.45, 1.02);
-  B(g, 'M_Trim', -0.45, 0, 0.98, 0.45, 2.05, 1.02); B(g, 'M_Glass', -0.3, 1.2, 1.02, 0.3, 1.8, 1.03); B(g, 'LampGlow', 0.6, 1.8, 1.0, 0.75, 2.05, 1.06); return g; } });
+  const g = G(); B(g, 'M_Brick', -1.45, 0, -0.97, 1.45, 2.45, 0.97); B(g, 'M_Stone', -1.5, 2.45, -1.0, 1.5, 2.6, 1.0);
+  B(g, 'M_Stone', -1.5, 0, -1.0, -1.25, 2.45, 1.0); B(g, 'M_Stone', 1.25, 0, -1.0, 1.5, 2.45, 1.0);
+  B(g, 'M_Trim', -0.45, 0, 0.95, 0.45, 2.05, 0.995); B(g, 'M_Glass', -0.3, 1.2, 0.995, 0.3, 1.8, 1.0); B(g, 'LampGlow', 0.6, 1.8, 0.92, 0.75, 2.05, 1.0); return g; } });
 def('RF_WaterTower', { ...ROOF, w: 3.0, d: 3.0, h: 9.0, mat: 'Wood', col: [[-1.5, -1.5, 1.5, 1.5, 0, 9]], build() {
   const g = G(); // stand 4.0, tank 4.0, roof 1.0 (sheet 02C)
   for (const [x, z] of [[-1.2, -1.2], [1.2, -1.2], [-1.2, 1.2], [1.2, 1.2]]) B(g, 'M_Metal', x - 0.08, 0, z - 0.08, x + 0.08, 4.0, z + 0.08);
   T(g, 'M_Metal', [-1.2, 0.3, -1.2], [1.2, 3.7, -1.2], 0.03); T(g, 'M_Metal', [1.2, 0.3, 1.2], [-1.2, 3.7, 1.2], 0.03);
   T(g, 'M_Metal', [-1.2, 0.3, 1.2], [-1.2, 3.7, -1.2], 0.03); T(g, 'M_Metal', [1.2, 0.3, -1.2], [1.2, 3.7, 1.2], 0.03);
-  B(g, 'M_Metal', -1.5, 3.85, -1.5, 1.5, 4.0, 1.5); C(g, 'Wood', 0, 4.0, 0, 1.5, 4.0, 12);
-  for (const y of [4.6, 5.6, 6.6, 7.6]) C(g, 'M_Metal', 0, y, 0, 1.52, 0.06, 12);
-  C(g, 'M_Metal', 0, 8.0, 0, 1.5, 1.0, 12, 0.05); B(g, 'M_Metal', 1.5, 0.0, -0.2, 1.54, 8.0, -0.16); B(g, 'M_Metal', 1.5, 0.0, 0.16, 1.54, 8.0, 0.2); return g; } });
+  B(g, 'M_Metal', -1.5, 3.85, -1.5, 1.5, 4.0, 1.5); C(g, 'Wood', 0, 4.0, 0, 1.44, 4.0, 12);
+  for (const y of [4.6, 5.6, 6.6, 7.6]) C(g, 'M_Metal', 0, y, 0, 1.47, 0.06, 12);
+  C(g, 'M_Metal', 0, 8.0, 0, 1.47, 1.0, 12, 0.05); B(g, 'M_Metal', 1.44, 0.0, -0.2, 1.48, 8.0, -0.16); B(g, 'M_Metal', 1.44, 0.0, 0.16, 1.48, 8.0, 0.2); return g; } });
 def('RF_ACUnit', { ...ROOF, w: 1.2, d: 0.8, h: 1.0, mat: 'Steel', col: [[-0.6, -0.4, 0.6, 0.4, 0, 1]], build() {
   const g = G(); B(g, 'M_Metal', -0.55, 0, -0.35, 0.55, 0.1, 0.35); B(g, 'Steel', -0.6, 0.1, -0.4, 0.6, 1.0, 0.4); C(g, 'M_Metal', 0, 1.0, 0, 0.3, 0.0, 12);
   for (let x = -0.5; x <= 0.5; x += 0.1) B(g, 'M_Metal', x - 0.01, 0.2, 0.4, x + 0.01, 0.9, 0.41); return g; } });
@@ -550,13 +550,13 @@ def('RF_Chimney', { ...ROOF, w: 0.6, d: 0.6, h: 1.2, mat: 'M_Brick', col: [[-0.3
   const g = G(); B(g, 'M_Brick', -0.27, 0, -0.27, 0.27, 0.95, 0.27); B(g, 'M_Stone', -0.3, 0.95, -0.3, 0.3, 1.05, 0.3); C(g, 'M_Metal', -0.12, 1.05, 0, 0.07, 0.15, 8); C(g, 'M_Metal', 0.12, 1.05, 0, 0.07, 0.15, 8); return g; } });
 def('RF_Skylight', { ...ROOF, w: 1.2, d: 1.2, h: 0.4, mat: 'M_Glass', col: [[-0.6, -0.6, 0.6, 0.6, 0, 0.4]], build() { const g = G(); B(g, 'M_Metal', -0.6, 0, -0.6, 0.6, 0.12, 0.6); const m = C(g, 'M_Glass', 0, 0.12, 0, 0.8, 0.28, 4, 0.02); m.rotation.y = Math.PI / 4; return g; } });
 def('RF_Hatch', { ...ROOF, w: 0.9, d: 0.9, h: 0.3, mat: 'M_Metal', params: { open: 0 }, col: [[-0.45, -0.45, 0.45, 0.45, 0, 0.3]], build(p) {
-  const g = G(); B(g, 'Wood', -0.45, 0, -0.45, 0.45, 0.24, 0.45); const lid = G(); lid.position.set(0, 0.24, -0.45); B(lid, 'M_Metal', -0.46, 0, 0, 0.46, 0.06, 0.92); lid.rotation.x = -p.open * 1.3; g.add(lid); return g; } });
-def('RF_SatelliteDish', { ...ROOF, w: 0.8, d: 0.8, h: 1.25, mat: 'Steel', col: [[-0.25, -0.25, 0.25, 0.25, 0, 0.6]], build() {
+  const g = G(); B(g, 'Wood', -0.44, 0, -0.44, 0.44, 0.24, 0.44); const lid = G(); lid.position.set(0, 0.24, -0.45); B(lid, 'M_Metal', -0.45, 0, 0, 0.45, 0.06, 0.9); lid.rotation.x = -p.open * 1.3; g.add(lid); return g; } });
+def('RF_SatelliteDish', { ...ROOF, w: 0.8, d: 0.5, proj: 0.16, h: 1.19, projY: 0.01, mat: 'Steel', col: [[-0.25, -0.25, 0.25, 0.25, 0, 0.6]], build() {
   const g = G(); B(g, 'M_Metal', -0.25, 0, -0.25, 0.25, 0.08, 0.25); C(g, 'M_Metal', 0, 0.08, 0, 0.04, 0.52, 6);
   const d = C(g, 'Steel', 0, 0.85, 0.05, 0.4, 0.08, 12, 0.6); d.rotation.x = 1.1; d.position.y = 0.85; T(g, 'M_Metal', [0, 0.85, 0.1], [0, 0.95, 0.38], 0.015); return g; } });
 const ATTACH = { sheet: '02C', spec: 'sheet', origin: 'BLE' }; // facade attachments: origin on the wall face, project to +Z
-def('RF_FlowerBox', { ...ATTACH, w: 1.3, d: 0.25, h: 0.25, mat: 'M_Trim', build() { const g = G(); B(g, 'M_Trim', 0, 0, 0, 1.3, 0.2, 0.25); for (let x = 0.15; x < 1.3; x += 0.25) blob(g, 'Foliage', x, 0.22, 0.12, 0.13, 0.05, 0.1); return g; } });
-def('RF_WallLamp', { ...ATTACH, w: 0.3, d: 0.3, h: 0.5, mat: 'Black', build() { const g = G(); B(g, 'Black', 0.1, 0.1, 0, 0.2, 0.3, 0.12); C(g, 'LampGlow', 0.15, 0.05, 0.2, 0.08, 0.3, 6); C(g, 'Black', 0.15, 0.35, 0.2, 0.12, 0.15, 6, 0.2); B(g, 'Black', 0.12, 0, 0.18, 0.18, 0.06, 0.22); return g; } });
+def('RF_FlowerBox', { ...ATTACH, w: 1.3, d: 0.25, h: 0.25, mat: 'M_Trim', build() { const g = G(); B(g, 'M_Trim', 0, 0, 0, 1.3, 0.2, 0.25); for (let x = 0.15; x < 1.3; x += 0.25) blob(g, 'Foliage', x, 0.2, 0.12, 0.13, 0.05, 0.1); return g; } });
+def('RF_WallLamp', { ...ATTACH, w: 0.3, d: 0.3, h: 0.5, mat: 'Black', build() { const g = G(); B(g, 'Black', 0.1, 0.12, 0, 0.2, 0.3, 0.06); C(g, 'LampGlow', 0.15, 0.05, 0.15, 0.08, 0.3, 8); C(g, 'Black', 0.15, 0.35, 0.15, 0.15 / Math.cos(Math.PI / 8), 0.15, 8, 0.2).rotation.y = Math.PI / 8; B(g, 'Black', 0.12, 0, 0.12, 0.18, 0.06, 0.18); return g; } });
 def('RF_BladeSign', { ...ATTACH, w: 0.06, d: 0.7, h: 0.9, mat: 'M_Trim', build() { const g = G(); B(g, 'Black', -0.03, 0.85, 0, 0.03, 0.9, 0.7); B(g, 'M_Trim', -0.025, 0, 0.1, 0.025, 0.8, 0.7); B(g, 'PaintYellow', -0.03, 0.06, 0.16, 0.03, 0.74, 0.64); B(g, 'M_Trim', -0.032, 0.1, 0.2, 0.032, 0.7, 0.6); return g; } });
 def('RF_Downspout3', { ...ATTACH, w: 0.12, d: 0.14, h: 3.0, mat: 'M_Metal', build() { const g = G(); C(g, 'M_Metal', 0.06, 0, 0.08, 0.06, 3.0, 8); B(g, 'M_Metal', 0.02, 2.6, 0, 0.1, 2.66, 0.08); return g; } });
 def('RF_Downspout4', { ...ATTACH, w: 0.12, d: 0.14, h: 4.0, mat: 'M_Metal', build() { const g = G(); C(g, 'M_Metal', 0.06, 0, 0.08, 0.06, 4.0, 8); B(g, 'M_Metal', 0.02, 3.6, 0, 0.1, 3.66, 0.08); return g; } });
@@ -575,10 +575,10 @@ def('MK_BikeStencil', { ...MK, w: 1.0, d: 1.8, mat: 'PaintWhite', build() { // o
   const g = G(); const y0 = 0.004, y1 = 0.009;
   for (const z of [-0.55, 0.55]) { B(g, 'PaintWhite', -0.32, y0, z - 0.32, 0.32, y1, z - 0.24); B(g, 'PaintWhite', -0.32, y0, z + 0.24, 0.32, y1, z + 0.32); B(g, 'PaintWhite', -0.32, y0, z - 0.32, -0.24, y1, z + 0.32); B(g, 'PaintWhite', 0.24, y0, z - 0.32, 0.32, y1, z + 0.32); }
   BC(g, 'PaintWhite', 0, (y0 + y1) / 2, 0, 0.08, y1 - y0, 0.95, 0, 0.5, 0); B(g, 'PaintWhite', -0.5, y0, 0.5, 0.5, y1, 0.58); B(g, 'PaintWhite', -0.06, y0, -0.9, 0.06, y1, 0.9); return g; } });
-def('MK_Arrow', { ...MK, w: 0.6, d: 1.8, mat: 'PaintWhite', build() { const g = G(); B(g, 'PaintWhite', -0.08, 0.004, -0.9, 0.08, 0.009, 0.4); BC(g, 'PaintWhite', -0.15, 0.0065, 0.62, 0.12, 0.005, 0.66, 0, -0.6, 0); BC(g, 'PaintWhite', 0.15, 0.0065, 0.62, 0.12, 0.005, 0.66, 0, 0.6, 0); return g; } });
+def('MK_Arrow', { ...MK, w: 0.6, d: 1.8, mat: 'PaintWhite', build() { const g = G(); B(g, 'PaintWhite', -0.08, 0.004, -0.9, 0.08, 0.009, 0.45); BC(g, 'PaintWhite', -0.115, 0.0065, 0.665, 0.11, 0.005, 0.5, 0, -0.6, 0); BC(g, 'PaintWhite', 0.115, 0.0065, 0.665, 0.11, 0.005, 0.5, 0, 0.6, 0); return g; } });
 def('MK_CrosswalkBar', { ...MK, w: 0.6, d: 4.0, mat: 'PaintWhite', build() { const g = G(); B(g, 'PaintWhite', -0.3, 0, -2, 0.3, 0.005, 2); return g; } });
 def('MK_StopBar', { ...MK, w: 3.5, d: 0.4, mat: 'PaintWhite', build() { const g = G(); B(g, 'PaintWhite', -1.75, 0, -0.2, 1.75, 0.005, 0.2); return g; } });
-def('MK_BufferHatch', { ...MK, spec: 'proposed', w: 'param', d: 3.0, mat: 'PaintWhite', params: { w: 1.5 }, build(p) {
+def('MK_BufferHatch', { ...MK, spec: 'proposed', w: 'param', d: 'param', mat: 'PaintWhite', params: { w: 1.5 }, build(p) {
   const g = G(); const L = Math.hypot(p.w, p.w) - 0.2; BC(g, 'PaintWhite', 0, 0.0025, 0, 0.15, 0.005, L, 0, Math.PI / 4, 0); return g; } });
 
 // Generated sweeps: build(params) returns geometry from an outline. Origin: world (placed at 0,0,0).
@@ -586,7 +586,7 @@ def('GEN_RoadSurface', { sheet: '04A', spec: 'sheet', w: 'param', h: 0.05, d: 'p
 def('GEN_SidewalkStrip', { sheet: '04A', spec: 'sheet', origin: 'BLE', w: 'param', h: 0.15, d: 'param', mat: 'Sidewalk', params: { len: 10, width: 4, ramps: [] }, build(p) {
   // local: X along the property line, Z out toward the street; curb is the outer 0.30
   const g = G(); const W = p.width, cuts = [...(p.ramps || [])].sort((a, b) => a - b);
-  let s = 0; const seg = (a, b, full) => { if (b - a < 1e-3) return; B(g, 'Sidewalk', a, Y_ROAD, 0, b, 0, full ? W - CURB_W : W - 1.8); if (full) B(g, 'Curb', a, Y_ROAD - 0.05, W - CURB_W, b, 0, W); };
+  let s = 0; const seg = (a, b, full) => { if (b - a < 1e-3) return; B(g, 'Sidewalk', a, Y_ROAD, 0, b, 0, full ? W - CURB_W : W - 1.8); if (full) B(g, 'Curb', a, Y_ROAD, W - CURB_W, b, 0, W); };
   for (const c of cuts) { seg(s, c - 1, true); seg(c - 1, c + 1, false); s = c + 1; }
   seg(s, p.len, true); return g; } });
 def('GEN_SidewalkCorner', { sheet: '04A', spec: 'sheet', origin: 'CORNER', w: 'param', h: 0.15, d: 'param', mat: 'Sidewalk', params: { wa: 4, wb: 4, r: 4 }, build(p) {
@@ -616,7 +616,7 @@ function cornerGeos(wa, wb, r) {
   const innerArc = r > 0 ? arcPts(wa - r, wb - r, Math.max(r - c, 0.01), 0, Math.PI / 2, n) : [[wa - c, wb - c]];
   const walk = [[0, 0], [wa - c, 0], ...innerArc.map(([x, z]) => [Math.min(x, wa - c), Math.min(z, wb - c)]), [0, wb - c]];
   const curb = [[wa - c, 0], [wa, 0], ...outerArc, [0, wb], [0, wb - c], ...innerArc.slice().reverse().map(([x, z]) => [Math.min(x, wa - c), Math.min(z, wb - c)])];
-  return { walk: prismGeo(walk, Y_ROAD, 0, false), curb: prismGeo(curb, Y_ROAD - 0.05, 0, true) };
+  return { walk: prismGeo(walk, Y_ROAD, 0, false), curb: prismGeo(curb, Y_ROAD, 0, true) };
 }
 
 // ---------- 03A vehicles (L x W x H, wheelbase and wheel Ø read off the sheet). Origin centre footprint, front +Z ----------
@@ -654,7 +654,7 @@ const VEHICLE_DEFS = {
   VEH_Taxi: { L: 4.90, W: 1.85, H: 1.50, wb: 2.85, wd: 0.66, paint: 'TaxiTeal', roofMat: 'TaxiCream', axles: [1.5, -1.35], lampY: [0.68, 0.8], proj: 0.16,
     body: [[2.45, 0.28], [2.45, 0.72], [2.32, 0.86], [0.8, 0.94], [-1.35, 0.98], [-2.38, 0.93], [-2.45, 0.75], [-2.45, 0.28]],
     glass: [[0.8, 0.94], [0.0, 1.44], [-0.85, 1.44], [-1.35, 0.98]], roof: [-0.85, 0.0],
-    extra(g, hl, hw) { for (const s of [-1, 1]) for (let z = -2.2; z < 2.2; z += 0.4) B(g, (Math.round(z / 0.4) % 2) ? 'TaxiCream' : 'TaxiTeal', s * hw - 0.004, 0.76, z, s * hw + 0.004, 0.86, z + 0.4); B(g, 'TaxiCream', -0.25, 1.5, -0.55, 0.25, 1.66, -0.3); } },
+    extra(g, hl, hw) { for (const s of [-1, 1]) for (let i = 0; i < 11; i++) { const z = -2.2 + i * 0.4; B(g, i % 2 ? 'TaxiCream' : 'TaxiTeal', s * hw - 0.004, 0.76, z, s * hw + 0.004, 0.86, z + 0.4); } B(g, 'TaxiCream', -0.25, 1.5, -0.55, 0.25, 1.66, -0.3); } },
   VEH_Hatchback: { L: 4.20, W: 1.80, H: 1.50, wb: 2.60, wd: 0.64, paint: 'Silver', axles: [1.25, -1.35], lampY: [0.7, 0.82],
     body: [[2.1, 0.27], [2.1, 0.72], [1.95, 0.88], [0.65, 0.96], [-2.02, 1.0], [-2.1, 0.85], [-2.1, 0.27]],
     glass: [[0.65, 0.96], [-0.05, 1.44], [-1.75, 1.44], [-2.02, 1.0]], roof: [-1.75, -0.05] },
@@ -666,9 +666,9 @@ const VEHICLE_DEFS = {
     glass: [[1.1, 1.06], [0.25, 1.74], [-2.3, 1.74], [-2.5, 1.08]], roof: [-2.3, 0.25] },
   VEH_BoxTruck: { L: 7.50, W: 2.40, H: 3.40, wb: 4.20, wd: 0.85, paint: 'TruckWhite', axles: [2.55, -1.65], lampY: [0.95, 1.12], tw: 0.24, dual: true,
     body: [[3.75, 0.55], [3.75, 1.4], [3.6, 1.6], [3.3, 2.65], [2.0, 2.7], [2.0, 0.55]], bodyW: 2.2,
-    extra(g, hl, hw) { profile(g, 'M_Glass', [[3.62, 1.62], [3.32, 2.6], [3.28, 2.6], [3.58, 1.62]], -1.0, 1.0); B(g, 'TruckWhite', -1.2, 0.95, -3.75, 1.2, 3.4, 1.85); B(g, 'M_Metal', -0.5, 0.55, -3.6, 0.5, 0.95, 2.0); B(g, 'M_Metal', -1.2, 0.95, -3.76, 1.2, 1.05, 1.85); } },
+    extra(g, hl, hw) { profile(g, 'M_Glass', [[3.62, 1.62], [3.32, 2.6], [3.28, 2.6], [3.58, 1.62]], -1.0, 1.0); B(g, 'TruckWhite', -1.2, 0.95, -3.75, 1.2, 3.4, 1.85); B(g, 'M_Metal', -0.5, 0.55, -3.6, 0.5, 0.95, 2.0); B(g, 'M_Metal', -1.2, 0.95, -3.75, 1.2, 1.05, 1.85); } },
 };
-for (const [id, o] of Object.entries(VEHICLE_DEFS)) def(id, { ...VEH, w: o.W, h: o.H, d: o.L, proj: o.proj || 0, mat: o.paint, col: [[-o.W / 2, -o.L / 2, o.W / 2, o.L / 2, 0, o.H]],
+for (const [id, o] of Object.entries(VEHICLE_DEFS)) def(id, { ...VEH, w: o.W, h: o.H, d: o.L, projY: o.proj || 0, mat: o.paint, col: [[-o.W / 2, -o.L / 2, o.W / 2, o.L / 2, 0, o.H]],
   build() { if (o.bodyW) { const oo = { ...o, W: o.bodyW }; const g = vehicle(oo); return g; } return vehicle(o); } });
 // box truck: the cab is narrower (2.2) than the 2.40 box; the box is added in extra() so the overall width stays 2.40
 
@@ -694,8 +694,8 @@ function buildBikeParts() {
   const sz = v => [v[0], v[1], v[2] - BIKE.headZ];
   for (const s of [-1, 1]) T(steer, 'BikeFrame', sz([s * 0.05, 0.62, 0.42]), sz([s * 0.05, BIKE.wheelR, 0.6]), 0.016);
   T(steer, 'M_Metal', sz(headHi), sz([0, 1.02, BIKE.barZ]), 0.02);
-  T(steer, 'Black', sz([-0.3, BIKE.barY - 0.01, BIKE.barZ - 0.06]), sz([0.3, BIKE.barY - 0.01, BIKE.barZ - 0.06]), 0.014);
-  for (const s of [-1, 1]) { T(steer, 'Black', sz([s * 0.3, BIKE.barY - 0.01, BIKE.barZ - 0.06]), sz([s * 0.34, BIKE.barY, BIKE.barZ - 0.12]), 0.014); }
+  T(steer, 'Black', sz([-0.29, BIKE.barY - 0.01, BIKE.barZ - 0.06]), sz([0.29, BIKE.barY - 0.01, BIKE.barZ - 0.06]), 0.014);
+  for (const s of [-1, 1]) { T(steer, 'Black', sz([s * 0.29, BIKE.barY - 0.01, BIKE.barZ - 0.06]), sz([s * 0.326, BIKE.barY, BIKE.barZ - 0.12]), 0.014); }
   B(steer, 'Black', -0.045, 1.06, 0.29 - BIKE.headZ, 0.045, 1.08, 0.33 - BIKE.headZ); // phone mount
   const phone = BC(steer, 'Black', 0, 1.12, 0.3 - BIKE.headZ, 0.085, 0.15, 0.012, -0.55, 0, 0);
   C(steer, 'LampGlow', 0, 0.78, 0.47 - BIKE.headZ, 0.04, 0.06, 6).rotation.x = Math.PI / 2;
@@ -703,7 +703,7 @@ function buildBikeParts() {
   wheelR.position.set(0, BIKE.wheelR, -0.6); frame.add(wheelR);
   return { frame, steer, wheelF, wheelR, box, lid, phone };
 }
-def('VEH_EBike', { ...VEH, w: 0.68, h: 1.16, d: 1.86, mat: 'BikeFrame', build() { const p = buildBikeParts(); const g = G(); g.add(p.frame); g.add(p.steer); return g; } });
+def('VEH_EBike', { ...VEH, w: 0.68, h: 1.19, d: 1.86, mat: 'BikeFrame', build() { const p = buildBikeParts(); const g = G(); g.add(p.frame); g.add(p.steer); return g; } });
 
 // ---------- 03C characters: one shared skeleton, forward kinematics, parts are boxes ----------
 // Character local frame: faces +Z, +X is the character's left. Joint rotations are Euler XYZ radians;
@@ -717,6 +717,7 @@ function jointMat(parent, ox, oy, oz, r, out) {
 }
 function partMat(joint, cx, cy, cz, sx, sy, sz, out) { _jm.compose(_jv.set(cx, cy, cz), _qI, _js.set(sx, sy, sz)); return out.multiplyMatrices(joint, _jm); }
 // k = height / 1.75. out maps part name -> Matrix4 (unit box transform). hairStyle scales the hair/helmet box.
+const charTop = (hair = [0.22, 0.05, 0.24]) => 0.95 + 0.05 + 0.52 + 0.215 + hair[1];  // head/helmet top at k = 1
 function solveFK(k, pose, root, out, hair = [0.22, 0.05, 0.24]) {
   const P = pose;
   const pelvis = jointMat(root, 0, 0.95 * k + (P.dy || 0), 0, P.pelvis, JOINT.pelvis);
@@ -772,7 +773,7 @@ function partColour(o, part) {
 }
 // single character as a Group of part meshes; call poseCharacter() to update
 function buildCharacter(outfitId, height = 1.75) {
-  const o = OUTFITS[outfitId], g = G(); g.userData.k = height / 1.75; g.userData.outfit = o; g.userData.parts = {}; g.userData.mats = {};
+  const o = OUTFITS[outfitId], g = G(); g.userData.k = height / charTop(o.hairBox); g.userData.outfit = o; g.userData.parts = {}; g.userData.mats = {};
   for (const p of PART_LIST) { const m = new THREE.Mesh(UNIT_BOX, M(partColour(o, p))); m.matrixAutoUpdate = false; m.castShadow = true; g.add(m); g.userData.parts[p] = m; g.userData.mats[p] = m.matrix; }
   if (o.vest) { const v = new THREE.Mesh(UNIT_BOX, M(o.vest)); v.matrixAutoUpdate = false; g.add(v); g.userData.vest = v; }
   const prop = G(); g.add(prop); g.userData.prop = prop;
@@ -794,12 +795,12 @@ function poseCharacter(g, pose) {
   if (g.userData.prop) { g.userData.prop.matrixAutoUpdate = false; g.userData.prop.matrix.copy(_fkOut.handR); g.userData.prop.matrix.multiply(_tmpUnscale.makeScale(1 / (0.08 * g.userData.k), 1 / (0.1 * g.userData.k), 1 / (0.1 * g.userData.k))); }
 }
 const _tmpUnscale = new THREE.Matrix4();
-const CHR = { sheet: '03C', spec: 'sheet', d: 0.4 };
-def('CHR_Rider', { ...CHR, w: 0.68, h: 1.75, build() { return buildCharacter('rider', 1.75); } });
+const CHR = { sheet: '03C', spec: 'sheet', d: null };
+def('CHR_Rider', { ...CHR, w: null, h: 1.75, build() { return buildCharacter('rider', 1.75); } });
 [['CHR_Customer01', 'c01', 1.72], ['CHR_Customer02', 'c02', 1.68], ['CHR_Customer03', 'c03', 1.85], ['CHR_Customer04', 'c04', 1.60], ['CHR_Customer05', 'c05', 1.78], ['CHR_Customer06', 'c06', 1.82]]
-  .forEach(([id, o, h]) => def(id, { ...CHR, w: 0.62, h, build() { return buildCharacter(o, h); } }));
-def('CHR_PedScrubs', { ...CHR, w: 0.62, h: 1.7, build() { return buildCharacter('pedA', 1.7); } });
-def('CHR_PedHoodie', { ...CHR, w: 0.62, h: 1.76, build() { return buildCharacter('pedB', 1.76); } });
+  .forEach(([id, o, h]) => def(id, { ...CHR, w: null, h, build() { return buildCharacter(o, h); } }));
+def('CHR_PedScrubs', { ...CHR, w: null, h: 1.7, build() { return buildCharacter('pedA', 1.7); } });
+def('CHR_PedHoodie', { ...CHR, w: null, h: 1.76, build() { return buildCharacter('pedB', 1.76); } });
 
 // ---------- 03C cargo: each in intact / damaged / ruined (params.state 0/1/2) ----------
 const CARGO_TYPES = {
@@ -826,10 +827,10 @@ function buildCargo(id, state) {
       const tilt = state === 1 ? 0.12 : 0, off = state === 1 ? 0.04 : 0;
       C(g, 'Cake', 0, 0, 0, 0.2, 0.18, 14); C(g, 'CakeRibbon', 0, 0.02, 0, 0.202, 0.03, 14);
       const t2 = C(g, 'Cake', off, 0.18, 0, 0.15, 0.14, 14); t2.rotation.z = tilt; C(g, 'CakeRibbon', off, 0.2, 0, 0.152, 0.025, 14).rotation.z = tilt;
-      const t3 = C(g, 'Cake', off * 2.2, 0.32, 0, 0.1, 0.13, 12); t3.rotation.z = tilt * 2; blob(g, 'CakeRibbon', off * 2.6, 0.45 - (state ? 0.03 : 0), 0, 0.04, 0.025, 0.04);
+      const t3 = C(g, 'Cake', off * 2.2, 0.32, 0, 0.1, 0.11, 12); t3.rotation.z = tilt * 2; blob(g, 'CakeRibbon', off * 2.6, 0.43 - (state ? 0.03 : 0), 0, 0.04, 0.02, 0.04);
     } else { blob(g, 'Cake', 0, 0.08, 0, 0.26, 0.09, 0.22); blob(g, 'Cake', 0.18, 0.05, 0.1, 0.1, 0.06, 0.08); blob(g, 'CakeRibbon', -0.05, 0.16, 0.05, 0.05, 0.03, 0.05); C(g, 'Cake', -0.15, 0, -0.12, 0.08, 0.04, 8); }
   } else if (id === 'CARGO_GoldfishBag') {
-    if (state === 0) { blob(g, 'Water', 0, 0.14, 0, 0.125, 0.14, 0.125); C(g, 'Water', 0, 0.26, 0, 0.03, 0.09, 6, 0.6); BC(g, 'Fish', 0, 0.13, 0, 0.03, 0.05, 0.09); }
+    if (state === 0) { blob(g, 'Water', 0, 0.13, 0, 0.147, 0.153, 0.147); C(g, 'Water', 0, 0.25, 0, 0.03, 0.1, 6, 0.6); BC(g, 'Fish', 0, 0.13, 0, 0.03, 0.05, 0.09); }
     else if (state === 1) { blob(g, 'Water', 0, 0.09, 0, 0.12, 0.09, 0.13); C(g, 'Water', 0.02, 0.17, 0, 0.03, 0.1, 6, 0.6); BC(g, 'Fish', 0, 0.06, 0, 0.03, 0.05, 0.09, 0, 0, 0.9); }
     else { C(g, 'Water', 0, 0, 0, 0.2, 0.01, 12); B(g, 'Water', -0.08, 0, -0.06, 0.1, 0.04, 0.08); BC(g, 'Fish', 0.05, 0.025, 0.02, 0.09, 0.03, 0.05, 0, 0.5, Math.PI / 2); }
   }
@@ -843,9 +844,9 @@ function intWall(g, x0, x1, holes = []) { // face at z=0, thickness to -z, two-t
   wallWithHoles(g, 'InteriorLow', x1 - x0, 0.95, INT_T, holes.map(h => [h[0], h[1], h[2], Math.min(h[3], 0.95)]).filter(h => h[1] < 0.95));
   const up = G(); wallWithHoles(up, 'Interior', x1 - x0, INT_H, INT_T, holes.filter(h => h[3] > 0.95).map(h => [h[0], Math.max(h[1], 0.95), h[2], h[3]]), 0.95); g.add(up);
   for (const c of g.children) c.position.x += x0;
-  B(g, 'Skirting', x0, 0, 0, x1, 0.1, 0.015);
+  B(g, 'Skirting', x0, 0, 0, x1, 0.1, 0.01);
 }
-const INTK = { sheet: '03B', spec: 'sheet', origin: 'BLE' };
+const INTK = { sheet: '03B', spec: 'sheet', origin: 'BLE', proj: 0.02 };
 // params.w: the sheet module is 2.00 m; the stairwell (3.52 deep) needs cut lengths, flagged as cuts in the audit
 def('INT_WallStraight', { ...INTK, w: 2.0, h: INT_H, d: INT_T, mat: 'Interior', params: { w: 2.0 }, build(p) { const g = G(); intWall(g, 0, p.w); return g; } });
 def('INT_WallCornerL', { ...INTK, origin: 'CORNER', w: 2.0, h: INT_H, d: 2.0, mat: 'Interior', build() { const g = G(); const a = G(); intWall(a, 0, 2); a.position.x = -2; g.add(a); const b = G(); intWall(b, 0, 2); b.rotation.y = Math.PI / 2; b.position.set(0, 0, 0); g.add(b); return g; } });
@@ -857,8 +858,8 @@ def('INT_DoorModule', { ...INTK, w: 2.0, h: INT_H, d: 0.24, mat: 'Interior', bui
   const leaf = G(); leaf.position.set(0.5, 0, -0.06); B(leaf, 'Door', 0, 0, -0.02, 1.0, 2.2, 0.02); B(leaf, 'Plate', 0.425, 1.55, 0.02, 0.575, 1.63, 0.025); C(leaf, 'Chrome', 0.88, 1.0, 0.04, 0.025, 0.06, 6).rotation.x = Math.PI / 2;
   g.add(leaf); g.userData.leaf = leaf; return g; } });
 def('INT_NumberPlate', { ...INTK, w: 0.15, h: 0.08, d: 0.005, mat: 'Plate', build() { const g = G(); B(g, 'Plate', 0, 0, 0, 0.15, 0.08, 0.005); return g; } });
-def('INT_GlazedDoor', { ...INTK, w: 1.0, h: 2.2, d: 0.05, mat: 'M_Trim', build() { const g = G(); B(g, 'M_Trim', 0, 0, -0.05, 1, 2.2, 0); B(g, 'M_Glass', 0.12, 0.3, -0.06, 0.88, 2.05, 0.01); return g; } });
-def('INT_Vestibule', { ...INTK, w: 3.4, h: INT_H + 0.15, d: 2.4, mat: 'Interior', build() {
+def('INT_GlazedDoor', { ...INTK, w: 1.0, h: 2.2, d: 0.05, proj: 0, mat: 'M_Trim', build() { const g = G(); B(g, 'M_Trim', 0, 0, -0.05, 1, 2.2, 0); B(g, 'M_Glass', 0.12, 0.3, -0.045, 0.88, 2.05, -0.005); return g; } });
+def('INT_Vestibule', { ...INTK, w: 3.4, h: INT_H + 0.3, d: 2.4, mat: 'Interior', build() {
   // external 3.40 x 2.40 (walls 0.20), clear 3.00 x 2.00; front wall (glazed door) at x=0..0.2; open toward +X (corridor)
   const g = G();
   const front = G(); intWall(front, 0, 2.4, [[0.7, 0, 1.7, 2.2]]); front.rotation.y = -Math.PI / 2; front.position.set(0, 0, -1.2); g.add(front);
@@ -866,10 +867,10 @@ def('INT_Vestibule', { ...INTK, w: 3.4, h: INT_H + 0.15, d: 2.4, mat: 'Interior'
   for (const s of [-1, 1]) { const w = G(); intWall(w, 0, 3.2); w.rotation.y = s > 0 ? Math.PI : 0; w.position.set(s > 0 ? 3.4 : 0.2, 0, s * 1.0); g.add(w); }
   B(g, 'Floor', 0, -0.15, -1.2, 3.4, 0, 1.2); B(g, 'Interior', 0, INT_H, -1.2, 3.4, INT_H + 0.15, 1.2);
   B(g, 'Wood', 0.25, 0, -0.4, 0.75, 0.01, 0.4); return g; } });
-def('INT_Corridor4', { ...INTK, origin: 'CF', w: 4.0, h: INT_H + 0.15, d: 2.4, mat: 'Interior', build() {
+def('INT_Corridor4', { ...INTK, origin: 'CF', w: 4.0, h: INT_H + 0.3, d: 2.4, mat: 'Interior', build() {
   const g = G(); B(g, 'Floor', -2, -0.15, -1.2, 2, 0, 1.2); B(g, 'Interior', -2, INT_H, -1.2, 2, INT_H + 0.15, 1.2);
   for (const s of [-1, 1]) { const w = G(); intWall(w, 0, 4); w.rotation.y = s > 0 ? Math.PI : 0; w.position.set(s > 0 ? 2 : -2, 0, s * 1.0); g.add(w); } return g; } });
-def('INT_Lift', { ...INTK, w: 2.0, h: INT_H, d: 1.8, mat: 'M_Metal', build() {
+def('INT_Lift', { ...INTK, spec: 'sheet', w: 2.0, h: INT_H + 0.15, d: 1.93, mat: 'M_Metal', build() {
   const g = G(); intWall(g, 0, 2, [[0.4, 0, 1.6, 2.2]]);
   B(g, 'Steel', 0.32, 0, -0.22, 0.4, 2.3, 0.03); B(g, 'Steel', 1.6, 0, -0.22, 1.68, 2.3, 0.03); B(g, 'Steel', 0.32, 2.2, -0.22, 1.68, 2.3, 0.03);
   const doors = G(); B(doors, 'Steel', 0.4, 0, -0.12, 1.0, 2.2, -0.08); B(doors, 'Steel', 1.0, 0, -0.12, 1.6, 2.2, -0.08); doors.userData.lift = true; g.add(doors); g.userData.doors = doors;
@@ -879,14 +880,14 @@ def('INT_Lift', { ...INTK, w: 2.0, h: INT_H, d: 1.8, mat: 'M_Metal', build() {
 def('INT_CallButton', { ...INTK, w: 0.12, h: 0.16, d: 0.02, mat: 'Black', build() { const g = G(); B(g, 'Black', 0, 0, 0, 0.12, 0.16, 0.02); return g; } });
 def('INT_MailboxBank', { ...INTK, w: 1.0, h: 0.8, d: 0.2, mat: 'Mailbox', build() { const g = G(); B(g, 'Mailbox', 0, 0, 0, 1, 0.8, 0.2); for (let c = 0; c < 4; c++) for (let r = 0; r < 3; r++) B(g, 'Steel', 0.04 + c * 0.24, 0.04 + r * 0.25, 0.2, 0.22 + c * 0.24, 0.24 + r * 0.25, 0.21); return g; } });
 def('INT_BuzzerPanel', { ...INTK, w: 0.3, h: 0.5, d: 0.03, mat: 'Steel', build() { const g = G(); B(g, 'Steel', 0, 0, 0, 0.3, 0.5, 0.03); for (let i = 0; i < 6; i++) B(g, 'Black', 0.2, 0.06 + i * 0.07, 0.03, 0.24, 0.1 + i * 0.07, 0.035); B(g, 'Black', 0.05, 0.38, 0.03, 0.14, 0.46, 0.035); return g; } });
-def('INT_Radiator', { ...INTK, w: 0.8, h: 0.6, d: 0.15, mat: 'Radiator', build() { const g = G(); for (let x = 0; x < 0.8; x += 0.08) B(g, 'Radiator', x + 0.005, 0.08, 0.02, x + 0.07, 0.6, 0.15); B(g, 'Radiator', 0, 0.12, 0.05, 0.8, 0.16, 0.12); return g; } });
+def('INT_Radiator', { ...INTK, w: 0.8, h: 0.6, d: 0.15, proj: 0, mat: 'Radiator', build() { const g = G(); for (let i = 0; i < 10; i++) B(g, 'Radiator', i * 0.08 + 0.005, 0, 0.0, i * 0.08 + 0.075, 0.6, 0.15); B(g, 'Radiator', 0, 0.12, 0.05, 0.8, 0.16, 0.12); return g; } });
 def('INT_CeilingLight', { ...INTK, origin: 'CF', w: 0.35, h: 0.1, d: 0.35, mat: 'LampGlow', build() { const g = G(); C(g, 'Steel', 0, -0.03, 0, 0.175, 0.03, 12); C(g, 'LampGlow', 0, -0.1, 0, 0.15, 0.07, 12, 0.8); return g; } });
 def('INT_Doormat', { ...INTK, origin: 'CF', w: 0.8, h: 0.015, d: 0.5, mat: 'WoodDark', build() { const g = G(); B(g, 'WoodDark', -0.4, 0, -0.25, 0.4, 0.015, 0.25); return g; } });
 def('INT_Handrail', { ...INTK, w: 1.0, h: 0.06, d: 0.08, mat: 'Wood', build() { const g = G(); CA(g, 'Wood', 'x', 0.5, 0.03, 0.06, 0.025, 1.0, 6); for (const x of [0.1, 0.9]) B(g, 'Steel', x - 0.01, 0, 0, x + 0.01, 0.03, 0.06); return g; } });
 def('INT_Landing', { ...INTK, origin: 'CF', w: 2.2, h: 0.15, d: 1.0, mat: 'Floor', build() { const g = G(); B(g, 'Floor', -1.1, -0.15, -0.5, 1.1, 0, 0.5); return g; } });
 // dogleg stair: 20 risers @ 0.15 = 3.00, 9 treads @ 0.28 = 2.52 run, flights 1.00 wide with a 0.20 gap, landing 2.20 x 1.00 at Z 1.50.
 // Origin: bottom of the lower flight, stairwell front-left corner; flights run along +X, lower flight at z∈[-2.2,-1.2] (+Z = corridor side)
-def('INT_StairDogleg', { ...INTK, origin: 'CORNER', w: 3.52, h: 3.0, d: 2.2, mat: 'Floor', build() {
+def('INT_StairDogleg', { ...INTK, origin: 'CORNER', w: 3.52, h: 3.0, projY: 0.88, d: 2.2, mat: 'Floor', build() {
   const g = G(), R = 0.15, Tr = 0.28;
   for (let i = 0; i < 9; i++) { // lower flight: z∈[-2.2,-1.2] (far side), rising toward +X; 10th riser lands on the landing
     B(g, 'Floor', i * Tr, 0, -2.2, (i + 1) * Tr, (i + 1) * R, -1.2);
@@ -2554,7 +2555,7 @@ function createDirector(W) {
     onCargoDamage(P, s) { if (s === 2 && W.rng.fx.chance(0.5)) appNotify('We have let the customer know their order is "evolving". 🙂'); },
     onAccept(P, order) { const roll = D.rolls[D.orderN++ % D.rolls.length]; order.roll = roll; D.fire('accept', { P, order, roll }); },
     onEnterBuilding(P, order) { const flags = {}; D.fire('enterBuilding', { P, order, roll: order.roll || { twist: 1 }, flags }); return flags; },
-    wantsBait(roll) { if (!D.has('tip_bait') || D.baits >= 2) return false; if (roll < 0.22) { D.baits++; return true; } return false; },
+    wantsBait(roll) { if (D.forceBait) { D.forceBait = false; return true; } if (!D.has('tip_bait') || D.baits >= 2) return false; if (roll < 0.22) { D.baits++; return true; } return false; },
     update(dt) {
       const P = players[0], sh = W.shift; if (!sh) return;
       for (const h of D.active.slice()) { const out = h.update(dt); if (out) { D.logEvent(h.card.id, out); h.cleanup(); D.active.splice(D.active.indexOf(h), 1); } }
@@ -2584,7 +2585,7 @@ function labelTexture(text, w = 128, h = 64, bg = '#d8c27a', fg = '#1b1c1e') {
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; return t;
 }
 function buildInterior(P, bld, order, flags) {
-  if (INT.scene) INT.scene.traverse(o => { if (o.geometry && o.geometry !== UNIT_BOX && !GEO_CACHE_SET.has(o.geometry)) o.geometry.dispose(); if (o.material && o.material.map) o.material.map.dispose(); });
+  if (INT.scene) { const shared = new Set([UNIT_BOX, ...GEO_CACHE.values()]); INT.scene.traverse(o => { if (o.geometry && !shared.has(o.geometry)) o.geometry.dispose(); if (o.material && o.material.map) o.material.map.dispose(); }); }
   const scene = new THREE.Scene(); scene.background = new THREE.Color(0x15130f);
   scene.add(new THREE.HemisphereLight(0xfff4e2, 0x51463a, 1.9)); const dl = new THREE.DirectionalLight(0xffffff, 0.7); dl.position.set(3, 10, 2); scene.add(dl);
   const N = bld.storeys, batch = new Batcher(Infinity), cols = [], doors = [], plc = [];
@@ -2995,8 +2996,9 @@ function buildMinimapBase(W) {
   const b = W.bounds, pad = 14, sc = 2, cw = Math.ceil((b.x1 - b.x0 + pad * 2) * sc), ch = Math.ceil((b.z1 - b.z0 + pad * 2) * sc);
   const c = document.createElement('canvas'); c.width = cw; c.height = ch; const g = c.getContext('2d');
   g.fillStyle = '#2a2420'; g.fillRect(0, 0, cw, ch);
-  const S = W.surface, cols = { 1: '#4a4d52', 2: '#8d877c', 3: '#8d877c', 4: '#6d6a63' };
-  for (let z = b.z0 - pad; z < b.z1 + pad; z += 0.5) for (let x = b.x0 - pad; x < b.x1 + pad; x += 0.5) { const code = S.codeAt(x, z); if (code) { g.fillStyle = cols[code]; g.fillRect((x - b.x0 + pad) * sc, (z - b.z0 + pad) * sc, 1, 1); } }
+  const S = W.surface, cols = { 0: [42, 36, 32], 1: [74, 77, 82], 2: [141, 135, 124], 3: [141, 135, 124], 4: [109, 106, 99] }, img = g.createImageData(cw, ch);
+  for (let py = 0; py < ch; py++) for (let px = 0; px < cw; px++) { const c = cols[S.codeAt(b.x0 - pad + (px + 0.5) / sc, b.z0 - pad + (py + 0.5) / sc)], o = (py * cw + px) * 4; img.data[o] = c[0]; img.data[o + 1] = c[1]; img.data[o + 2] = c[2]; img.data[o + 3] = 255; }
+  g.putImageData(img, 0, 0);
   for (const L of W.lanes) if (L.type === 'bike') { g.strokeStyle = '#3b8857'; g.lineWidth = 3; g.beginPath(); g.moveTo((L.a.x - b.x0 + pad) * sc, (L.a.z - b.z0 + pad) * sc); g.lineTo((L.b.x - b.x0 + pad) * sc, (L.b.z - b.z0 + pad) * sc); g.stroke(); }
   hud.map = { c, sc, ox: b.x0 - pad, oz: b.z0 - pad };
 }
@@ -3116,11 +3118,98 @@ function updateAudio(P, dt) {
   AUDIO.skid.gain.value = on ? clamp(b.skid * sp / 7, 0, 1) * 0.3 : 0;
 }
 
-// @@SECTION16@@
 
 // ===================================================================================
-// 16. DEBUG AND TUNING (tuning panel part; debug overlay added in step 10)
+// 16. DEBUG AND TUNING — live TUNING panel (F2), debug overlay (F1 / `)
 // ===================================================================================
+// ---- debug overlay (F1 or `): stats, telemetry, situation log, free-fly, module-name audit ----
+const dbg = { on: false, labels: false, t: 0, lab: [], boxes: null, labT: 0 };
+function toggleDebug() {
+  dbg.on = !dbg.on; ui('debug').style.display = dbg.on ? 'block' : 'none';
+  if (dbg.on) buildDebugPanel(); else { setLabels(false); camState.free = false; }
+}
+function buildDebugPanel() {
+  const el = ui('debug');
+  el.innerHTML = `<div><button id="dFree">Free-fly cam</button><button id="dLabels">Module names</button><button id="dAudit">Dimension audit</button><button id="dTune">Tuning</button></div>
+    <div style="margin:4px 0"><select id="dSit">${SITUATIONS.map(s => `<option>${s.id}</option>`).join('')}</select><button id="dForce">Force</button><button id="dCargo">Cycle cargo</button></div>
+    <div>time scale <input id="dTime" type="range" min="0.1" max="1" step="0.05" value="${game.timeScale}" style="width:120px"></div>
+    <pre id="dStats"></pre><pre id="dLog"></pre><pre id="dAuditOut" style="color:#bbb"></pre>`;
+  ui('dFree').onclick = () => { camState.free = !camState.free; if (camState.free) { camState.freePos.copy(camera.position); camState.freeYaw = camera.rotation.y; camState.freePitch = camera.rotation.x; toast('Free-fly: WASD + drag, Q/E down/up, Shift fast'); } };
+  ui('dLabels').onclick = () => setLabels(!dbg.labels);
+  ui('dAudit').onclick = () => { const r = moduleAudit(); ui('dAuditOut').textContent = r.text; console.table(r.rows); };
+  ui('dTune').onclick = () => { const t = ui('tuning'); t.style.display = t.style.display === 'block' ? 'none' : 'block'; };
+  ui('dForce').onclick = () => { const id = ui('dSit').value, card = SITUATIONS.find(s => s.id === id), P = players[0]; if (!W.director) return toast('Start a shift first');
+    let ok = false;
+    if (card.trigger === 'ambient' || card.trigger === 'shiftStart') ok = W.director.start(card, { P }, true);
+    else if (card.trigger === 'crash') { ok = crash(P, 'wall', null); }
+    else if (card.trigger === 'enterBuilding' && P.order) { P.order.roll = { twist: id === 'scrambled_floors' ? 0 : 0.5, pin: 1 }; ok = true; }
+    else if (card.trigger === 'accept' && P.order) { P.order.wrongPin = true; W.director.onPickup(P, P.order); ok = true; }
+    else if (card.trigger === 'offer') { W.director.baits = 0; ok = true; toast('Next offer is tip bait'); W.director.forceBait = true; }
+    toast(ok ? `Forced ${id}` : `${id}: prerequisites not met here`); };
+  ui('dCargo').onclick = () => cycleCargo(players[0]);
+  ui('dTime').oninput = e => { game.timeScale = +e.target.value; };
+}
+function cycleCargo(P) { const ids = Object.keys(CARGO_TYPES); const i = P.cargo ? (ids.indexOf(P.cargo.type) + 1) % (ids.length + 1) : 0; if (i < ids.length) loadCargo(P, ids[i]); else unloadCargo(P); }
+function updateDebug(dt) {
+  if (dbg.labels) updateLabels(dt);
+  if (!dbg.on) return; dbg.t -= dt; if (dbg.t > 0) return; dbg.t = 0.25;
+  const P = players[0], b = P.bike, inf = renderer.info, D = W.director;
+  const f = bikeFwd(b), vF = b.vx * f.x + b.vz * f.z, vL = b.vx * -f.z + b.vz * f.x;
+  ui('dStats').textContent =
+`fps ${perf.fps.toFixed(0)}  frame ${perf.ms.toFixed(1)} ms  seed ${game.seed}
+draw calls ${perf.calls}  tris ${(perf.tris / 1000).toFixed(0)}k  geos ${inf.memory.geometries}  tex ${inf.memory.textures}
+placements ${W.placements.length}  colliders ${W.colliders.length}  batches ${W.batchMeshes}  gen ${W.genMs.toFixed(0)} ms
+cars ${W.traffic ? W.traffic.cars.length : 0}  peds ${W.peds ? W.peds.list.filter(p => p.active).length : 0}
+— bike —  ${b.state}${P.onFoot ? ' (on foot)' : ''}  surface ${['blocked', 'asphalt', 'sidewalk', 'ramp', 'alley'][b.surf]}
+pos ${b.x.toFixed(1)}, ${b.z.toFixed(1)}  y ${b.y.toFixed(2)}  head ${(b.heading / DEG).toFixed(0)}°
+speed ${(Math.hypot(b.vx, b.vz) * 3.6).toFixed(1)} km/h  vF ${vF.toFixed(2)}  vLat ${vL.toFixed(2)}
+steer ${(b.steer / DEG).toFixed(1)}°  lean ${(b.lean / DEG).toFixed(1)}°  yaw ${b.yawRate.toFixed(2)} rad/s
+skid ${b.skid.toFixed(2)}  drift ${b.driftYaw.toFixed(2)}  accel ${b.accel.toFixed(1)}  latAcc ${b.latAcc.toFixed(1)}
+cargo ${P.cargo ? P.cargo.type + ' ' + P.cargo.abuse.toFixed(0) + '%' : '—'}  chain ×${P.chain.mult.toFixed(1)} (${P.chain.count})`;
+  ui('dLog').textContent = '— situations —  deck: ' + (D ? D.deck.map(s => s.id.replace(/_/g, ' ')).join(', ') : 'start a shift') + '\n' + (D ? D.log.slice(-10).map(l => `${l.t.toFixed(0).padStart(4)} s  ${l.id}: ${l.what}`).join('\n') : '');
+}
+function setLabels(on) {
+  dbg.labels = on; const host = ui('labels'); host.innerHTML = ''; dbg.lab = [];
+  if (dbg.boxes) { dbg.boxes.removeFromParent(); dbg.boxes.geometry.dispose(); dbg.boxes = null; }
+}
+// "show module names": label every placed asset near the camera with its catalogue id and dims (white = spec, cyan = proposed)
+function updateLabels(dt) {
+  const host = ui('labels'); dbg.labT -= dt;
+  const P = players[0], list = P.onFoot ? INT.placements : W.placements, scene = P.onFoot ? INT.scene : W.scene;
+  if (dbg.labT <= 0) {
+    dbg.labT = 0.3; const cp = camera.position, fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion), near = [];
+    for (const r of list) { const dx = r.x - cp.x, dy = r.y - cp.y, dz = r.z - cp.z, d2 = dx * dx + dy * dy + dz * dz; if (d2 > 30 * 30 || dx * fwd.x + dy * fwd.y + dz * fwd.z < 0) continue; if (r.id.startsWith('MK_') && d2 > 12 * 12) continue; near.push([d2, r]); }
+    near.sort((a, b) => a[0] - b[0]); const pick = near.slice(0, 110).map(n => n[1]);
+    host.innerHTML = ''; dbg.lab = pick.map(r => { const d = document.createElement('div'); const dims = [r.w, r.h, r.d].map(x => (x == null ? '·' : (+x).toFixed(2))).join('×'); d.textContent = `${r.id} ${dims}`; if (r.spec === 'proposed') d.className = 'p'; host.appendChild(d); return { r, d }; });
+    // wireframe boxes from the measured local bounds
+    if (dbg.boxes) { dbg.boxes.removeFromParent(); dbg.boxes.geometry.dispose(); }
+    const pos = [], m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), c = [], vv = new THREE.Vector3();
+    for (const { r } of dbg.lab) { if (!r.lmin) continue; m.compose(new THREE.Vector3(r.x, r.y, r.z), q.setFromEuler(e.set(0, r.rotY, 0)), new THREE.Vector3(1, 1, 1));
+      const [a0, a1, a2] = r.lmin, [b0, b1, b2] = r.lmax; for (let i = 0; i < 8; i++) c[i] = vv.set(i & 1 ? b0 : a0, i & 2 ? b1 : a1, i & 4 ? b2 : a2).clone().applyMatrix4(m);
+      for (const [i, j] of [[0, 1], [2, 3], [4, 5], [6, 7], [0, 2], [1, 3], [4, 6], [5, 7], [0, 4], [1, 5], [2, 6], [3, 7]]) pos.push(c[i].x, c[i].y, c[i].z, c[j].x, c[j].y, c[j].z); }
+    const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+    dbg.boxes = new THREE.LineSegments(g, new THREE.LineBasicMaterial({ color: 0x5fd3e6, depthTest: false, transparent: true, opacity: 0.6 })); dbg.boxes.renderOrder = 10; scene.add(dbg.boxes);
+  }
+  const tmp = new THREE.Vector3();
+  for (const { r, d } of dbg.lab) { tmp.set(r.x, r.y + (r.lmax ? r.lmax[1] : 1) + 0.15, r.z).project(camera); if (tmp.z > 1 || Math.abs(tmp.x) > 1.1 || Math.abs(tmp.y) > 1.1) { d.style.display = 'none'; continue; } d.style.display = 'block'; d.style.left = ((tmp.x + 1) / 2 * innerWidth).toFixed(0) + 'px'; d.style.top = ((1 - tmp.y) / 2 * innerHeight).toFixed(0) + 'px'; }
+}
+// build every catalogue module once and compare its measured bounds with the declared dims
+function moduleAudit() {
+  const rows = [], counts = {}; for (const p of W.placements) counts[p.id] = (counts[p.id] || 0) + 1; if (INT.placements) for (const p of INT.placements) counts[p.id] = (counts[p.id] || 0) + 1;
+  let bad = 0;
+  for (const [id, def] of Object.entries(MODULES)) {
+    const g = def.build({ ...(def.params || {}) }); _box3.setFromObject(g, true); const s = _box3.getSize(new THREE.Vector3());
+    const chk = (decl, meas, extra = 0) => typeof decl !== 'number' ? '·' : meas >= decl - 0.011 && meas <= decl + extra + 0.011 ? 'ok' : 'Δ' + (meas - decl).toFixed(2);
+    const r = { id, sheet: def.sheet, spec: def.spec, placed: counts[id] || 0, w: def.w, h: def.h, d: def.d, mw: +s.x.toFixed(3), mh: +s.y.toFixed(3), md: +s.z.toFixed(3) };
+    r.cw = chk(def.w, s.x); r.ch = chk(def.h, s.y, def.projY || 0); r.cd = chk(def.d, s.z, def.proj || 0);
+    if ([r.cw, r.ch, r.cd].some(c => c.startsWith('Δ'))) bad++;
+    rows.push(r);
+  }
+  const lines = rows.filter(r => [r.cw, r.ch, r.cd].some(c => c.startsWith('Δ'))).map(r => `${r.id.padEnd(22)} w ${r.cw} h ${r.ch} d ${r.cd}`);
+  const text = `— dimension audit — ${rows.length} modules, ${rows.reduce((a, r) => a + r.placed, 0)} placed, ${bad} outside 1 cm\n` + (lines.join('\n') || 'all within tolerance') + '\n(full table in console)';
+  return { rows, text };
+}
+
 function saveTuning() { try { localStorage.setItem('lastmile.tuning', JSON.stringify(TUNING)); } catch (e) { /* storage blocked */ } }
 function buildTuningPanel() {
   const el = document.getElementById('tuning'), groups = {};
@@ -3154,12 +3243,11 @@ function placeBike(P, x, z, heading) {
 }
 function startWorld(seed, graph = 'district') {
   game.seed = seed;
-  if (W) { W.scene.traverse(o => { if (o.geometry && o.geometry !== UNIT_BOX && !GEO_CACHE_SET.has(o.geometry)) o.geometry.dispose(); }); }
+  if (W) { const shared = new Set([UNIT_BOX, ...GEO_CACHE.values()]); W.scene.traverse(o => { if (o.geometry && !shared.has(o.geometry)) o.geometry.dispose(); }); }
   createWorld(seed, graph);
   if (!players[0]) players[0] = createPlayer(0);
   for (const P of players) { W.scene.add(P.root); spawnPlayer(P); }
 }
-const GEO_CACHE_SET = new Set();
 function onAction(a) {
   const P = players[0]; if (!P) return;
   if (a === 'accept') { if (P.onFoot) return interiorInteract(P); if (P.offer) return acceptOffer(P); const o = P.order; if (o && o.state === 'toCustomer') { const ap = o.offer.bld.entrance.approach; if (Math.hypot(P.bike.x - ap.x, P.bike.z - ap.z) < 3.6 && P.bike.state === 'ride') return enterBuilding(P); } return; }
@@ -3168,7 +3256,7 @@ function onAction(a) {
   if (a === 'mute') { AUDIO.muted = !AUDIO.muted; toast(AUDIO.muted ? 'Muted' : 'Sound on'); return; }
   if (a === 'camera') { P.camMode = P.camMode === 'fp' ? 'tp' : 'fp'; camState.tpInit = false; }
   if (a === 'restart' && P.checkpoint && !P.onFoot) { const cp = P.checkpoint; fadeTo(() => { if (P.bike.state === 'crash') endCrash(P); clearChain(P, 'restart'); placeBike(P, cp.x, cp.z, cp.heading); }, 0.12, 0.2); }
-  if (a === 'pause') { game.paused = !game.paused; ui('pause').style.display = game.paused ? 'flex' : 'none'; }
+  if (a === 'pause' && game.mode === 'street') { game.paused = !game.paused; ui('pause').style.display = game.paused ? 'flex' : 'none'; }
 }
 addEventListener('keydown', e => {
   if (e.target && e.target.tagName === 'INPUT' && e.target.type === 'text') return;
@@ -3177,9 +3265,10 @@ addEventListener('keydown', e => {
   audioUnlock();
   for (const P of players) if (P.bike.state === 'crash' && e.code !== 'KeyR') { P.crashSkip = true; if (P.crashHold) P.crashSkipScene = true; }
   const map = { KeyV: 'camera', KeyR: 'restart', Escape: 'pause', KeyE: 'accept', KeyQ: 'decline', KeyB: 'bell', KeyM: 'mute' };
-  if (e.code === 'KeyC' && game.mode !== 'title') { const ids = Object.keys(CARGO_TYPES), P = players[0]; const i = P.cargo ? (ids.indexOf(P.cargo.type) + 1) % (ids.length + 1) : 0; if (i < ids.length) loadCargo(P, ids[i]); else unloadCargo(P); return; }
+  if (e.code === 'F1' || e.code === 'Backquote') { toggleDebug(); return; }
+  if (e.code === 'KeyC' && dbg.on) { cycleCargo(players[0]); return; }
   if (e.code === 'F2') { const t = ui('tuning'); t.style.display = t.style.display === 'block' ? 'none' : 'block'; return; }
-  if (e.code === 'Enter' && game.mode === 'title') { beginShift(); return; }
+  if (e.code === 'Enter' && game.mode === 'title') { ui('startBtn').click(); return; }
   if (game.mode === 'receipt') return;
   if (/^Digit[1-9]$/.test(e.code) && players[0].onFoot) { liftPress(players[0], +e.code.slice(5)); return; }
   if (e.code === 'Escape' && players[0].onFoot && ui('liftUI').style.display === 'block') { ui('liftUI').style.display = 'none'; return; }
@@ -3232,17 +3321,32 @@ function frame(now) {
   updateInteriorAnim(dtReal);
   renderFrame(P.onFoot && INT.scene ? INT.scene : W.scene);
   updateBubble();
-  updateHUD(P, dtReal); updateAudio(P, dtReal);
+  updateHUD(P, dtReal); updateAudio(P, dtReal); updateDebug(dtReal);
 }
+// seeds live in the URL hash (#seed=...) so two players can run the same shift
+function hashSeed() { const m = location.hash.match(/seed=([^&]+)/); return m ? decodeURIComponent(m[1]) : null; }
+function setSeed(seed) { ui('seedInput').value = seed; if (hashSeed() !== seed) history.replaceState(null, '', '#seed=' + encodeURIComponent(seed)); }
+function freshSeed() { const a = new Uint32Array(1); (crypto && crypto.getRandomValues ? crypto.getRandomValues(a) : (a[0] = Date.now())); return (a[0] >>> 0).toString(36); }
+function dailySeed() { return 'daily-' + new Date().toISOString().slice(0, 10); }
+function loadSeed(seed, thenStart) { setSeed(seed); hideBubble(); camera.removeFromParent(); fadeState.phase = 'none'; ui('fade').style.opacity = 0; if (players[0]) { const P = players[0]; P.onFoot = null; P.entering = false; unloadCargo(P); if (P.bike.state === 'crash') endCrash(P); } INT.scene = null; if (dbg.labels) setLabels(false); startWorld(seed, 'district'); if (thenStart) beginShift(); else showTitle(); }
+function showTitle() { game.mode = 'title'; game.paused = false; ['pause', 'receipt'].forEach(id => (ui(id).style.display = 'none')); ui('title').style.display = 'flex'; ui('offers').innerHTML = ''; hud.offerKey = ''; }
 function boot() {
-  for (const g of GEO_CACHE.values()) GEO_CACHE_SET.add(g);
   resize(); buildTuningPanel();
-  const hashSeed = (location.hash.match(/seed=([^&]+)/) || [])[1];
-  const seed = hashSeed ? decodeURIComponent(hashSeed) : 'demo';
-  ui('seedInput').value = seed;
+  const seed = hashSeed() || 'demo';
+  setSeed(seed);
   startWorld(seed, 'district');
-  ui('title').style.display = 'flex';
-  ui('startBtn').onclick = beginShift;
+  showTitle();
+  ui('startBtn').onclick = () => { const s2 = ui('seedInput').value.trim() || 'demo'; if (s2 !== game.seed) loadSeed(s2, true); else beginShift(); };
+  ui('dailyBtn').onclick = () => loadSeed(dailySeed(), false);
+  ui('newSeedBtn').onclick = () => loadSeed(freshSeed(), false);
+  ui('resumeBtn').onclick = () => onAction('pause');
+  ui('restartShiftBtn').onclick = () => loadSeed(game.seed, true);
+  ui('titleBtn').onclick = () => showTitle();
+  ui('againBtn').onclick = () => loadSeed(game.seed, true);
+  ui('newShiftBtn').onclick = () => loadSeed(freshSeed(), true);
+  ui('savePng').onclick = () => { const a = document.createElement('a'); a.href = ui('receiptImg').src; a.download = `lastmile-receipt-${game.seed}.png`; document.body.appendChild(a); a.click(); a.remove(); };
+  addEventListener('hashchange', () => { const h = hashSeed(); if (h && h !== game.seed && game.mode === 'title') loadSeed(h, false); });
+  ui('pauseHelp').innerHTML = ui('title').querySelector('.help').innerHTML;
   // test hook: advance the fixed-step simulation synchronously (headless tests render slowly)
   const sim = (sec) => { const P = players[0]; for (let i = 0; i < Math.round(sec / DT); i++) { readInput(P); tick(DT); updateFade(DT); } acc = 0; return W.time; };
   window.__game = { get W() { return W; }, players, TUNING, MODULES, game, KEYS, perf, renderer, sim, onAction, loadCargo, placeBike, camState, camera, beginShift, endShift, SITUATIONS, crash };
