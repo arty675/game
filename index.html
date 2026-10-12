@@ -1032,6 +1032,7 @@ function genDistrict(W) {
   genOuterRows(W, L.outer, R);
   for (const j of L.junctions) genJunctionHardware(W, j);
   for (const b of [...L.blocks, L.outer]) genFurniture(W, b, R);
+  genRoadwork(W, R);
   genParked(W, L, R);
 }
 
@@ -1211,8 +1212,8 @@ function buildFacade(W, b, f, style, R, fi) {
       const at = vat(o, dF, sd.pos[0], nOut, sd.pos[2]), ap = vat(o, dF, sd.approach[0], nOut, sd.approach[2]);
       const rec = { kind: sn, module: gid, building: b, p: at, approach: ap, nOut, dF };
       side.doors.push(vdot(vsub(at, side.a), side.d));
-      if (gid === 'BK_G_DoorResidential' && b.delivery && !b.entrance) { b.entrance = rec; W.deliveryBuildings.push(b); }
-      if (gid === 'BK_G_Restaurant') { b.pickup = rec; W.restaurants.push(rec); }
+      if (gid === 'BK_G_DoorResidential' && b.delivery && !b.entrance) { b.entrance = rec; W.deliveryBuildings.push(b); (side.keyDoors ||= []).push(vdot(vsub(at, side.a), side.d)); }
+      if (gid === 'BK_G_Restaurant') { b.pickup = rec; W.restaurants.push(rec); (side.keyDoors ||= []).push(vdot(vsub(at, side.a), side.d)); }
       if (gid === 'BK_G_DoorResidential') { const l = vat(o, dF, 3.0, nOut, 0); place('RF_WallLamp', {}, l.x, 2.35, l.z, yaw); }
     }
     if (full && !rear && (gid === 'BK_G_Storefront' || gid === 'BK_G_StorefrontDoor') && R.chance(0.22)) { const q = vat(o, dF, 3.85, nOut, 0); place('RF_BladeSign', {}, q.x, 3.05, q.z, yaw); }
@@ -1288,9 +1289,17 @@ function genPark(W, s, R) {
   for (let t = 0; t + 2 <= s.len + 1e-6; t += 2) { const q = vat(s.a, s.d, s.len - t, s.nOut, 0); place('ST_ParkFence', {}, q.x, 0, q.z, yaw); }
   for (let t = 6; t < s.len - 4; t += 11) for (const dep of [5, 13, 24]) { const q = vat(s.a, s.d, t + R.range(-2, 2) + (dep === 13 ? 5 : 0), s.nIn, dep + R.range(-1, 1)); place('ST_Tree', { h: R.range(6, 8) }, q.x, 0, q.z, R.range(0, 6)); }
   for (let t = 15; t < s.len - 4; t += 30) { const q = vat(s.a, s.d, t, s.nIn, 2.2); place('ST_Bench', {}, q.x, 0, q.z, yaw); const l = vat(s.a, s.d, t + 7, s.nIn, 1.2); place('ST_LampPost', {}, l.x, 0, l.z, 0); }
+  // community garden behind the park fence: backyard fence ring + shed (02B backyard set)
+  const gt = s.len * 0.62, gd = 7, fyaw = yawOf(s.nOut);
+  for (let k = 0; k < 4; k++) { const q = vat(s.a, s.d, gt + 8 - k * 2, s.nIn, gd); place('ST_BackyardFence', {}, q.x, 0, q.z, fyaw); const q2 = vat(s.a, s.d, gt + 8 - k * 2, s.nIn, gd + 6); place('ST_BackyardFence', {}, q2.x, 0, q2.z, fyaw); }
+  for (let k = 0; k < 3; k++) for (const e of [0, 8]) { const q = vat(s.a, s.d, gt + e, s.nIn, gd + k * 2); place('ST_BackyardFence', {}, q.x, 0, q.z, yawOf(e ? vmul(s.d, -1) : s.d)); }
+  { const q = vat(s.a, s.d, gt + 5.5, s.nIn, gd + 3.5); place('ST_Shed', {}, q.x, 0, q.z, fyaw); }
 }
-// signals, ped signals, stop signs, street signs
+// signals, ped signals, stop signs, street signs; green bike dashes across the junction box
 function genJunctionHardware(W, j) {
+  for (const L1 of j.legs) { const L2 = j.legs.find(l => l !== L1 && vdot(l.u, L1.u) < -0.99 && l.prof === L1.prof); if (!L2 || !L1.o.fwd) continue;
+    const d = v(L1.e.dx, L1.e.dz), rE = vrot(d), bike = L1.prof.bands.find(b => b.type === 'bike'); if (!bike) continue;
+    for (let s0 = -L1.dProp + 0.5; s0 <= L1.dProp - 0.5; s0 += 2) { const q = vat(j.p, d, s0, rE, bike.oc); place('MK_BikeDash', {}, q.x, Y_ROAD + MARK_Y, q.z, yawOf(d), { flat: true }); } }
   const incoming = W.lanes.filter(l => l.type === 'travel' && l.endJ === j);
   for (const l of incoming) {
     const r = l.run, p = r.p, fwd = l.band.dir > 0, s = fwd ? r.cw1 - 0.6 : r.cw0 + 0.6, off = fwd ? p.curbR + 0.7 : p.curbL - 0.7;
@@ -1315,15 +1324,17 @@ function genFurniture(W, blk, R) {
     const near = (t, list, d) => list.some(x => Math.abs(x - t) < d);
     let k = 0, hydrant = false;
     const isAvenue = s.prof.name === 'avenue', outerAve = isAvenue && blk.id === 'OUT';
-    let shelterAt = outerAve && !W.busShelter ? s.len / 2 : -99, cartAt = isAvenue && !outerAve && !W.hotdog ? t0 + 6 : -99;
+    const reserved = [];
+    // one bus shelter on the outer avenue sidewalk: first spot from the middle with no door or ramp in front of it
+    if (outerAve && !W.busShelter) for (let k2 = 0; k2 < 40; k2++) { const t = s.len / 2 + (k2 % 2 ? 1 : -1) * Math.ceil(k2 / 2) * 3; if (t < t0 || t > t1 || near(t, s.doors, 3.2) || near(t, s.ramps, 5)) continue; const qs = vat(s.a, s.d, t, s.nOut, fz - 0.15); place('ST_BusShelter', {}, qs.x, 0, qs.z, yawOf(s.nIn)); W.busShelter = qs; reserved.push(t); break; }
+    let cartAt = isAvenue && !outerAve && !W.hotdog ? t0 + 6 : -99;
     for (let t = t0; t <= t1; t += 6, k++) {
-      if (near(t, s.doors, 2.6) || near(t, s.ramps, 3)) continue;
+      if (near(t, s.doors, 2.6) || near(t, s.ramps, 3) || near(t, reserved, 4.5)) continue;
       const q = vat(s.a, s.d, t, s.nOut, fz);
-      if (Math.abs(t - shelterAt) < 6) { if (!W.busShelter) { const qs = vat(s.a, s.d, shelterAt, s.nOut, fz - 0.15); place('ST_BusShelter', {}, qs.x, 0, qs.z, yawOf(s.nIn)); W.busShelter = qs; } continue; }
       if (Math.abs(t - cartAt) < 3 && !W.hotdog) { place('ST_HotDogCart', {}, q.x, 0, q.z, yaw + Math.PI / 2); W.hotdog = q; continue; }
       const slot = k % 4;
       if (slot === 0) { place('ST_TreePit', {}, q.x, 0.001, q.z, yaw, { flat: true }); place('ST_Tree', { h: R.range(6, 8) }, q.x, 0, q.z, R.range(0, 6)); }
-      else if (slot === 2) place('ST_LampPost', {}, q.x, 0, q.z, 0);
+      else if (slot === 2) { if (isAvenue) place('ST_LampCobra', {}, q.x, 0, q.z, yaw); else place('ST_LampPost', {}, q.x, 0, q.z, 0); }
       else {
         let id = null;
         if (!hydrant && t > s.len * 0.3) { id = 'ST_Hydrant'; hydrant = true; W.hydrants.push(q); }
@@ -1340,12 +1351,21 @@ function genFurniture(W, blk, R) {
       else if (roll < 0.16 && s.walk >= 4) { const q = vat(s.a, s.d, t, s.nOut, 1.4); const { g } = place('ST_CellarHatch', { open: 0 }, q.x, 0.003, q.z, yaw, { flat: true }); W.cellarHatches.push({ p: q, yaw, side: s }); }
     }
     // one sidewalk shed run on a street-side mid facade
-    if (!W.shed && s.prof.name === 'street' && blk.id !== 'OUT' && s.len > 60) {
-      const t = s.len * 0.55; if (!near(t, s.doors, 8)) { for (let k2 = 0; k2 < 3; k2++) { const q = vat(s.a, s.d, t + 6 - k2 * 4, s.nOut, 0); place('ST_SidewalkShed', {}, q.x, 0, q.z, yaw); } W.shed = vat(s.a, s.d, t, s.nOut, 1.2); }
+    if (!W.shed && s.prof.name === 'street' && blk.id !== 'OUT' && s.len > 40) {
+      for (let t = s.len * 0.5; t > t0 + 6; t -= 2) { if (near(t, s.keyDoors || [], 8.5) || near(t, s.ramps, 8)) continue; for (let k2 = 0; k2 < 3; k2++) { const q = vat(s.a, s.d, t + 6 - k2 * 4, s.nOut, 0); place('ST_SidewalkShed', {}, q.x, 0, q.z, yaw); } W.shed = vat(s.a, s.d, t, s.nOut, 1.2); break; }
     }
     // street sign at block corners
     if (blk.id !== 'OUT' && blk.turn[si] > 0) { const prev = blk.sides[(si - 1 + blk.sides.length) % blk.sides.length]; if (prev.walk > 0) { const P = blk.poly[si]; const q = vadd(P, vmul(vadd(prev.nOut, s.nOut), 1.6)); place('ST_StreetSign', {}, q.x, 0, q.z, yaw); } }
   });
+}
+function genRoadwork(W, R) {
+  const cands = W.parkingSlots.filter(ps => ps.run.p.name === 'street' && ps.s1 - ps.s0 > 30); if (!cands.length) return;
+  const ps = R.pick(cands), r = ps.run, b = ps.band, sA = lerp(ps.s0 + 6, ps.s1 - 16, R.float()), yaw = yawOf(r.u);
+  const at = (s0, o) => vat(r.start, r.u, s0, r.r, o);
+  for (let k = 0; k < 2; k++) { const q = at(sA + 1.5 + k * 3.05, b.oc); place('ST_JerseyBarrier', {}, q.x, Y_ROAD, q.z, yaw + Math.PI / 2); }
+  for (let k = 0; k < 4; k++) { const q = at(sA - 1.5 - k * 2, b.oc + (b.o1 - b.oc) * (k / 3) * Math.sign(-b.oc)); place('ST_Cone', {}, q.x, Y_ROAD, q.z, 0); }
+  { const q = at(sA + 8.2, b.oc); place('ST_BikeLaneBarrier', {}, q.x, Y_ROAD, q.z, yaw + Math.PI / 2); }
+  ps.reserved = [sA - 8, sA + 10];
 }
 const PARKED_TYPES = [['VEH_Hatchback', 3], ['VEH_Taxi', 1.5], ['VEH_SUV', 2], ['VEH_Minivan', 2], ['VEH_DeliveryVan', 1], ['VEH_BoxTruck', 0.35]];
 function genParked(W, L, R) {
@@ -1356,7 +1376,7 @@ function genParked(W, L, R) {
       const [id] = R.weighted(PARKED_TYPES, x => x[1]), def = MODULES[id], len = def.d;
       const sc = s + len / 2, q = vat(r.start, r.u, sc, r.r, b.oc + (b.o0 < 0 ? -0.15 : 0.15));
       if (sc + len / 2 > ps.s1) break;
-      const nearHydrant = W.hydrants.some(h => Math.hypot(h.x - q.x, h.z - q.z) < 4.5);
+      const nearHydrant = W.hydrants.some(h => Math.hypot(h.x - q.x, h.z - q.z) < 4.5) || (ps.reserved && sc + len / 2 > ps.reserved[0] && sc - len / 2 < ps.reserved[1]);
       if (!nearHydrant && R.chance(0.78)) {
         place(id, {}, q.x, Y_ROAD, q.z, yawCar);
         const fwdCar = vmul(r.u, b.dir > 0 ? 1 : -1);
@@ -1511,7 +1531,7 @@ function createWorld(seed, graphName = 'district') {
   const t0 = performance.now();
   genDistrict(w);
   w.batchMeshes = w.batcher.build(w.staticRoot, BATCH_MAT);
-  buildTraffic(w); buildSignalLamps(w); buildPeds(w);
+  buildTraffic(w); buildSignalLamps(w); buildPeds(w); initSkidMarks(scene);
   w.genMs = performance.now() - t0;
   return w;
 }
@@ -1526,7 +1546,7 @@ function createPlayer(id) {
   const parts = buildBikeParts();
   const root = G(), lean = G(); root.rotation.order = 'YXZ'; root.add(lean); lean.add(parts.frame); lean.add(parts.steer);
   root.traverse(o => { if (o.isMesh) o.castShadow = true; });
-  const rider = buildCharacter('rider', 1.75); rider.position.set(0, -0.08, -0.3); rider.visible = false; lean.add(rider);
+  const rider = MODULES.CHR_Rider.build(); rider.position.set(0, -0.08, -0.3); rider.visible = false; lean.add(rider);
   // first-person forearms + gloves on the grips (bar width 0.68)
   const hands = G();
   for (const s of [-1, 1]) {
@@ -1626,6 +1646,7 @@ function updateBike(P, dt) {
   groundAndCurbs(P, ox, oz, dt);
   if (b.state === 'ride') collideStatic(P);
   if (b.state === 'ride' && W.traffic) collideDynamic(P);
+  updateSkidMarks(P);
   // --- visual lean: centripetal, clamped, smoothed. +lean = leaning right.
   b.latAcc = sp * b.yawRate;
   const leanTarget = clamp(Math.atan2(-b.latAcc, G_ACC), -T.leanMaxDeg * DEG, T.leanMaxDeg * DEG);
@@ -1637,6 +1658,23 @@ function updateBike(P, dt) {
   // checkpoint every 2.5 s of clean riding on a surface
   P.cpTimer += dt;
   if (P.cpTimer > 2.5 && sp > 1 && W.time - b.lastHit > 1.5 && b.skid < 0.1 && (b.surf === 1 || b.surf === 2 || b.surf === 4)) { P.checkpoint = { x: b.x, z: b.z, heading: b.heading }; P.cpTimer = 0; }
+}
+// skid marks: a ring buffer of dark strips left by the locked rear tyre (one InstancedMesh)
+const SKID = { im: null, n: 500, i: 0, last: null };
+function initSkidMarks(scene) {
+  const geo = new THREE.PlaneGeometry(0.07, 1); geo.rotateX(-Math.PI / 2);
+  SKID.im = new THREE.InstancedMesh(geo, new THREE.MeshBasicMaterial({ color: 0x121212, transparent: true, opacity: 0.55, depthWrite: false, polygonOffset: true, polygonOffsetFactor: -2 }), SKID.n);
+  const z = new THREE.Matrix4().makeScale(0, 0, 0); for (let i = 0; i < SKID.n; i++) SKID.im.setMatrixAt(i, z);
+  SKID.im.frustumCulled = false; SKID.im.renderOrder = 1; scene.add(SKID.im); SKID.i = 0; SKID.last = null;
+}
+const _sm = new THREE.Matrix4(), _sq = new THREE.Quaternion(), _se = new THREE.Euler(), _sv = new THREE.Vector3(), _ss = new THREE.Vector3();
+function updateSkidMarks(P) {
+  const b = P.bike, f = bikeFwd(b), rx = b.x - f.x * 0.6, rz = b.z - f.z * 0.6;
+  if (!SKID.im || b.skid < 0.35 || Math.hypot(b.vx, b.vz) < 0.8) { SKID.last = null; return; }
+  if (!SKID.last) { SKID.last = { x: rx, z: rz }; return; }
+  const dx = rx - SKID.last.x, dz = rz - SKID.last.z, d = Math.hypot(dx, dz); if (d < 0.15) return;
+  _sm.compose(_sv.set((rx + SKID.last.x) / 2, W.surface.height(rx, rz) + 0.012, (rz + SKID.last.z) / 2), _sq.setFromEuler(_se.set(0, Math.atan2(dx, dz), 0)), _ss.set(1, 1, d));
+  SKID.im.setMatrixAt(SKID.i, _sm); SKID.i = (SKID.i + 1) % SKID.n; SKID.im.instanceMatrix.needsUpdate = true; SKID.last = { x: rx, z: rz };
 }
 function kick(P, amount) { P.bike.bumpV -= amount * 30 * TUNING.bumpCamGain; P.shake = Math.max(P.shake, amount * 2); if (P.cargo) cargoImpulse(P, 'bump', amount); }
 
@@ -1987,7 +2025,7 @@ const CARGO_TIP_FACTOR = [1, 0.4, 0];
 const CARGO_THRESH = [34, 70];
 function loadCargo(P, typeId) {
   unloadCargo(P);
-  const c = { type: typeId, def: CARGO_TYPES[typeId], abuse: 0, state: 0, ox: 0, oy: 0, oz: 0, vx: 0, vy: 0, vz: 0, group: G(), meshes: [0, 1, 2].map(s => buildCargo(typeId, s)), flash: 0 };
+  const c = { type: typeId, def: CARGO_TYPES[typeId], abuse: 0, state: 0, ox: 0, oy: 0, oz: 0, vx: 0, vy: 0, vz: 0, group: G(), meshes: [0, 1, 2].map(s => MODULES[typeId].build({ state: s })), flash: 0 };
   c.meshes.forEach((m, i) => { m.visible = i === 0; c.group.add(m); m.traverse(o => { if (o.isMesh) o.castShadow = true; }); });
   P.cargoAnchor.add(c.group); P.cargo = c; P.parts.lid.rotation.x = -1.9;
   return c;
@@ -2518,8 +2556,8 @@ const SITUATIONS = [
         return null;
       }, cleanup() { c.removeFromParent(); P.crashHold = false; P.lookAtTarget = null; } };
     } },
-  { id: 'cheerful_app', rarity: 'common', weight: 10, trigger: 'crash', cooldown: 4, tellSeconds: 0, outcomes: ['notified'],
-    prerequisites() { return true; }, run() { setTimeout(() => appNotify(W.rng.fx.pick(CHEERFUL)), 700); return null; } },
+  { id: 'cheerful_app', rarity: 'common', weight: 10, trigger: 'crash', cooldown: 20, tellSeconds: 0, outcomes: ['notified'],
+    prerequisites() { return true; }, run(ctx) { const line = ctx.kind === 'ped' ? 'A pedestrian has left you a 1-star review. In person. 🙃' : W.rng.fx.pick(CHEERFUL); setTimeout(() => appNotify(line), 700); return null; } },
   { id: 'wrong_pin', rarity: 'uncommon', weight: 3, trigger: 'accept', cooldown: 0, tellSeconds: 0, outcomes: ['found door'],
     prerequisites(ctx) { return ctx.roll.pin < 0.4; }, run(ctx) { ctx.order.wrongPin = true; return null; } },
   { id: 'scrambled_floors', rarity: 'uncommon', weight: 3, trigger: 'enterBuilding', cooldown: 0, tellSeconds: 0, outcomes: ['found by elimination'],
@@ -3175,7 +3213,8 @@ function setLabels(on) {
 // "show module names": label every placed asset near the camera with its catalogue id and dims (white = spec, cyan = proposed)
 function updateLabels(dt) {
   const host = ui('labels'); dbg.labT -= dt;
-  const P = players[0], list = P.onFoot ? INT.placements : W.placements, scene = P.onFoot ? INT.scene : W.scene;
+  const P = players[0], scene = P.onFoot ? INT.scene : W.scene;
+  const list = P.onFoot ? INT.placements : W.placements.concat(dynamicRecords(P));
   if (dbg.labT <= 0) {
     dbg.labT = 0.3; const cp = camera.position, fwd = new THREE.Vector3(0, 0, -1).applyQuaternion(camera.quaternion), near = [];
     for (const r of list) { const dx = r.x - cp.x, dy = r.y - cp.y, dz = r.z - cp.z, d2 = dx * dx + dy * dy + dz * dz; if (d2 > 30 * 30 || dx * fwd.x + dy * fwd.y + dz * fwd.z < 0) continue; if (r.id.startsWith('MK_') && d2 > 12 * 12) continue; near.push([d2, r]); }
@@ -3192,6 +3231,15 @@ function updateLabels(dt) {
   }
   const tmp = new THREE.Vector3();
   for (const { r, d } of dbg.lab) { tmp.set(r.x, r.y + (r.lmax ? r.lmax[1] : 1) + 0.15, r.z).project(camera); if (tmp.z > 1 || Math.abs(tmp.x) > 1.1 || Math.abs(tmp.y) > 1.1) { d.style.display = 'none'; continue; } d.style.display = 'block'; d.style.left = ((tmp.x + 1) / 2 * innerWidth).toFixed(0) + 'px'; d.style.top = ((1 - tmp.y) / 2 * innerHeight).toFixed(0) + 'px'; }
+}
+// moving assets as pseudo-placements for the audit labels (no wireframes)
+function dynamicRecords(P) {
+  const rec = (id, x, y, z) => { const d = MODULES[id]; return { id, x, y, z, rotY: 0, spec: d.spec, w: typeof d.w === 'number' ? d.w : null, h: typeof d.h === 'number' ? d.h : null, d: typeof d.d === 'number' ? d.d : null }; };
+  const out = [rec('VEH_EBike', P.bike.x, P.bike.y, P.bike.z)];
+  if (P.cargo) out.push(rec(P.cargo.type, P.bike.x, P.bike.y + 0.8, P.bike.z));
+  if (W.traffic) for (const c of W.traffic.cars) out.push(rec(c.type, c.x, Y_ROAD, c.z));
+  if (W.peds) for (const pd of W.peds.list) if (pd.active) out.push(rec(pd.outfit.top === 'Scrubs' ? 'CHR_PedScrubs' : 'CHR_PedHoodie', pd.x, 0, pd.z));
+  return out;
 }
 // build every catalogue module once and compare its measured bounds with the declared dims
 function moduleAudit() {
@@ -3259,7 +3307,7 @@ function onAction(a) {
   if (a === 'pause' && game.mode === 'street') { game.paused = !game.paused; ui('pause').style.display = game.paused ? 'flex' : 'none'; }
 }
 addEventListener('keydown', e => {
-  if (e.target && e.target.tagName === 'INPUT' && e.target.type === 'text') return;
+  if (e.target && e.target.tagName === 'INPUT' && e.target.type === 'text') { if (e.code === 'Enter' && game.mode === 'title') ui('startBtn').click(); return; }
   if (['F1', 'F2', 'Space', 'ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Backquote', 'Tab'].includes(e.code)) e.preventDefault();
   KEYS.add(e.code); if (e.repeat) return;
   audioUnlock();
@@ -3349,7 +3397,7 @@ function boot() {
   ui('pauseHelp').innerHTML = ui('title').querySelector('.help').innerHTML;
   // test hook: advance the fixed-step simulation synchronously (headless tests render slowly)
   const sim = (sec) => { const P = players[0]; for (let i = 0; i < Math.round(sec / DT); i++) { readInput(P); tick(DT); updateFade(DT); } acc = 0; return W.time; };
-  window.__game = { get W() { return W; }, players, TUNING, MODULES, game, KEYS, perf, renderer, sim, onAction, loadCargo, placeBike, camState, camera, beginShift, endShift, SITUATIONS, crash };
+  window.__game = { get W() { return W; }, players, TUNING, MODULES, game, KEYS, perf, renderer, sim, onAction, loadCargo, placeBike, camState, camera, beginShift, endShift, SITUATIONS, crash, navRoute, orderTarget, INT, interiorInteract, tick, readInput };
   requestAnimationFrame(frame);
 }
 boot();
